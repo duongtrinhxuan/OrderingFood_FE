@@ -10,10 +10,12 @@
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",
+    "@react-native-community/cli-server-api": "^20.0.2",
     "@react-navigation/bottom-tabs": "^7.5.0",
     "@react-navigation/native": "^7.1.18",
     "@react-navigation/stack": "^7.5.0",
-    "expo": "^54.0.22",
+    "expo": "^54.0.25",
+    "expo-constants": "~18.0.10",
     "expo-linear-gradient": "~15.0.7",
     "expo-status-bar": "~3.0.8",
     "expo-vector-icons": "^10.0.1",
