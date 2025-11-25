@@ -1,27 +1,26 @@
 import React from "react";
 import { NavigationContainer } from "@react-navigation/native";
 import { createStackNavigator } from "@react-navigation/stack";
-import { StatusBar, StyleSheet, View } from "react-native";
+import { StatusBar, StyleSheet } from "react-native";
 import { Provider as PaperProvider } from "react-native-paper";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 
-// Import screens
 import AuthScreen from "./src/screens/AuthScreen";
-import MainTabNavigator from "./src/navigation/MainTabNavigator";
 import ClientNavigator from "./src/navigation/ClientNavigator";
 import RestaurantTabNavigator from "./src/navigation/RestaurantTabNavigator";
-
-// Import theme
 import { theme } from "./src/theme/theme";
-import { AuthContext } from "./src/context/AuthContext";
+import { AuthContext, AuthUser, UserRole } from "./src/context/AuthContext";
 
 const Stack = createStackNavigator();
 
 const App = () => {
-  const [isAuthenticated, setIsAuthenticated] = React.useState(false);
-  const [userRole, setUserRole] = React.useState<"client" | "restaurant">(
-    "client"
-  );
+  const [user, setUser] = React.useState<AuthUser | null>(null);
+
+  const isAuthenticated = Boolean(user);
+  const userRole: UserRole =
+    user?.roleId === 2 ? "restaurant" : ("client" as UserRole);
+
+  const handleLogout = () => setUser(null);
 
   return (
     <SafeAreaProvider>
@@ -29,15 +28,11 @@ const App = () => {
         <SafeAreaView style={styles.safeArea}>
           <AuthContext.Provider
             value={{
+              user,
               isAuthenticated,
               userRole,
-              login: (role) => {
-                setUserRole(role);
-                setIsAuthenticated(true);
-              },
-              logout: () => {
-                setIsAuthenticated(false);
-              },
+              setUser,
+              logout: handleLogout,
             }}
           >
             <NavigationContainer>
@@ -51,10 +46,7 @@ const App = () => {
                     {(props) => (
                       <AuthScreen
                         {...props}
-                        onLogin={(role: "client" | "restaurant") => {
-                          setUserRole(role);
-                          setIsAuthenticated(true);
-                        }}
+                        onLogin={(authUser: AuthUser) => setUser(authUser)}
                       />
                     )}
                   </Stack.Screen>

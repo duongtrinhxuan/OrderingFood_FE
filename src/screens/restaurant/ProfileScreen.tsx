@@ -14,7 +14,7 @@ import { theme } from "../../theme/theme";
 import { useAuth } from "../../context/AuthContext";
 
 const RestaurantProfileScreen = () => {
-  const { logout } = useAuth();
+  const { user, logout } = useAuth();
   const handleLogout = () => {
     Alert.alert("Đăng xuất", "Bạn có chắc chắn muốn đăng xuất?", [
       { text: "Hủy", style: "cancel" },
@@ -99,16 +99,22 @@ const RestaurantProfileScreen = () => {
         <View style={styles.profileInfo}>
           <View style={styles.avatarContainer}>
             <Image
-              source={{ uri: "https://via.placeholder.com/100x100" }}
+              source={{
+                uri:
+                  user?.avatar ||
+                  "https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?fit=crop&w=200&h=200",
+              }}
               style={styles.avatar}
             />
             <TouchableOpacity style={styles.editAvatarButton}>
               <Icon name="camera-alt" size={16} color={theme.colors.surface} />
             </TouchableOpacity>
           </View>
-          <Text style={styles.restaurantName}>Pizza Hut - Quận 1</Text>
-          <Text style={styles.restaurantEmail}>pizzahut@email.com</Text>
-          <Text style={styles.restaurantPhone}>+84 123 456 789</Text>
+          <Text style={styles.restaurantName}>{user?.username}</Text>
+          <Text style={styles.restaurantEmail}>{user?.email}</Text>
+          <Text style={styles.restaurantPhone}>
+            {user?.phone || "Chưa cập nhật"}
+          </Text>
         </View>
       </LinearGradient>
 

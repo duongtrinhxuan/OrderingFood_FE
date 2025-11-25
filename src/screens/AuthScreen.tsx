@@ -1,22 +1,25 @@
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import {
   View,
   Text,
   StyleSheet,
   TouchableOpacity,
   TextInput,
-  Image,
   Alert,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
+  ActivityIndicator,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
-import { theme } from "../theme/theme";
 import Icon from "react-native-vector-icons/MaterialIcons";
 
+import { theme } from "../theme/theme";
+import { api } from "../services/api";
+import { AuthUser } from "../context/AuthContext";
+
 interface AuthScreenProps {
-  onLogin: (role: "client" | "restaurant") => void;
+  onLogin: (user: AuthUser) => void;
 }
 
 const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin }) => {
@@ -25,24 +28,89 @@ const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin }) => {
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [phone, setPhone] = useState("");
-  const [name, setName] = useState("");
+  const [fullName, setFullName] = useState("");
+  const [gender, setGender] = useState<"male" | "female">("male");
   const [selectedRole, setSelectedRole] = useState<"client" | "restaurant">(
     "client"
   );
+  const [loading, setLoading] = useState(false);
 
-  const handleAuth = () => {
-    if (!email || !password) {
-      Alert.alert("Lỗi", "Vui lòng nhập đầy đủ thông tin");
-      return;
+  const disabled = useMemo(
+    () =>
+      loading ||
+      !email ||
+      !password ||
+      (!isLogin &&
+        (!fullName ||
+          !phone ||
+          !confirmPassword ||
+          password !== confirmPassword)),
+    [loading, email, password, isLogin, fullName, phone, confirmPassword]
+  );
+
+  const buildAuthUser = (payload: any): AuthUser => ({
+    id: payload.id,
+    email: payload.email,
+    username: payload.username,
+    roleId: payload.roleId,
+    phone: payload.phone ?? undefined,
+    avatar: payload.avatar ?? undefined,
+    gender: payload.gender ?? undefined,
+  });
+
+  const handleAuth = async () => {
+    try {
+      if (!email || !password) {
+        Alert.alert("Lỗi", "Vui lòng nhập email và mật khẩu.");
+        return;
+      }
+
+      setLoading(true);
+
+      if (isLogin) {
+        const user = await api.login({ email, password });
+        onLogin(buildAuthUser(user));
+        return;
+      }
+
+      if (!fullName || !phone) {
+        Alert.alert("Lỗi", "Vui lòng điền đầy đủ thông tin đăng ký.");
+        return;
+      }
+
+      if (password !== confirmPassword) {
+        Alert.alert("Lỗi", "Mật khẩu xác nhận không khớp.");
+        return;
+      }
+
+      const roleId = selectedRole === "client" ? 1 : 2;
+      const createdUser = await api.createUser({
+        email,
+        username: fullName,
+        password,
+        phone,
+        gender,
+        roleId,
+        isActive: true,
+      });
+
+      if (roleId === 1) {
+        await api.createCart({
+          userId: createdUser.id,
+          status: "ACTIVE",
+          isActive: true,
+        });
+      }
+
+      onLogin(buildAuthUser(createdUser));
+    } catch (error: any) {
+      Alert.alert(
+        "Thao tác thất bại",
+        error?.message || "Vui lòng thử lại sau ít phút."
+      );
+    } finally {
+      setLoading(false);
     }
-
-    if (!isLogin && password !== confirmPassword) {
-      Alert.alert("Lỗi", "Mật khẩu xác nhận không khớp");
-      return;
-    }
-
-    // Mock authentication - in real app, call API
-    onLogin(selectedRole);
   };
 
   return (
@@ -82,62 +150,64 @@ const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin }) => {
             </TouchableOpacity>
           </View>
 
-          <View style={styles.roleContainer}>
-            <Text style={styles.roleLabel}>Bạn là:</Text>
-            <View style={styles.roleButtons}>
-              <TouchableOpacity
-                style={[
-                  styles.roleButton,
-                  selectedRole === "client" && styles.activeRoleButton,
-                ]}
-                onPress={() => setSelectedRole("client")}
-              >
-                <Icon
-                  name="person"
-                  size={24}
-                  color={
-                    selectedRole === "client"
-                      ? theme.colors.surface
-                      : theme.colors.primary
-                  }
-                />
-                <Text
+          {!isLogin && (
+            <View style={styles.roleContainer}>
+              <Text style={styles.roleLabel}>Bạn là:</Text>
+              <View style={styles.roleButtons}>
+                <TouchableOpacity
                   style={[
-                    styles.roleButtonText,
-                    selectedRole === "client" && styles.activeRoleButtonText,
+                    styles.roleButton,
+                    selectedRole === "client" && styles.activeRoleButton,
                   ]}
+                  onPress={() => setSelectedRole("client")}
                 >
-                  Khách hàng
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[
-                  styles.roleButton,
-                  selectedRole === "restaurant" && styles.activeRoleButton,
-                ]}
-                onPress={() => setSelectedRole("restaurant")}
-              >
-                <Icon
-                  name="restaurant"
-                  size={24}
-                  color={
-                    selectedRole === "restaurant"
-                      ? theme.colors.surface
-                      : theme.colors.primary
-                  }
-                />
-                <Text
+                  <Icon
+                    name="person"
+                    size={24}
+                    color={
+                      selectedRole === "client"
+                        ? theme.colors.surface
+                        : theme.colors.primary
+                    }
+                  />
+                  <Text
+                    style={[
+                      styles.roleButtonText,
+                      selectedRole === "client" && styles.activeRoleButtonText,
+                    ]}
+                  >
+                    Khách hàng
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
                   style={[
-                    styles.roleButtonText,
-                    selectedRole === "restaurant" &&
-                      styles.activeRoleButtonText,
+                    styles.roleButton,
+                    selectedRole === "restaurant" && styles.activeRoleButton,
                   ]}
+                  onPress={() => setSelectedRole("restaurant")}
                 >
-                  Nhà hàng
-                </Text>
-              </TouchableOpacity>
+                  <Icon
+                    name="restaurant"
+                    size={24}
+                    color={
+                      selectedRole === "restaurant"
+                        ? theme.colors.surface
+                        : theme.colors.primary
+                    }
+                  />
+                  <Text
+                    style={[
+                      styles.roleButtonText,
+                      selectedRole === "restaurant" &&
+                        styles.activeRoleButtonText,
+                    ]}
+                  >
+                    Nhà hàng
+                  </Text>
+                </TouchableOpacity>
+              </View>
             </View>
-          </View>
+          )}
 
           {!isLogin && (
             <View style={styles.inputContainer}>
@@ -145,8 +215,8 @@ const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin }) => {
               <TextInput
                 style={styles.input}
                 placeholder="Họ và tên"
-                value={name}
-                onChangeText={setName}
+                value={fullName}
+                onChangeText={setFullName}
                 placeholderTextColor={theme.colors.placeholder}
               />
             </View>
@@ -166,17 +236,76 @@ const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin }) => {
           </View>
 
           {!isLogin && (
-            <View style={styles.inputContainer}>
-              <Icon name="phone" size={20} color={theme.colors.mediumGray} />
-              <TextInput
-                style={styles.input}
-                placeholder="Số điện thoại"
-                value={phone}
-                onChangeText={setPhone}
-                keyboardType="phone-pad"
-                placeholderTextColor={theme.colors.placeholder}
-              />
-            </View>
+            <>
+              <View style={styles.inputContainer}>
+                <Icon name="phone" size={20} color={theme.colors.mediumGray} />
+                <TextInput
+                  style={styles.input}
+                  placeholder="Số điện thoại"
+                  value={phone}
+                  onChangeText={setPhone}
+                  keyboardType="phone-pad"
+                  placeholderTextColor={theme.colors.placeholder}
+                />
+              </View>
+
+              <View style={styles.roleContainer}>
+                <Text style={styles.roleLabel}>Giới tính</Text>
+                <View style={styles.roleButtons}>
+                  <TouchableOpacity
+                    style={[
+                      styles.roleButton,
+                      gender === "male" && styles.activeRoleButton,
+                    ]}
+                    onPress={() => setGender("male")}
+                  >
+                    <Icon
+                      name="male"
+                      size={24}
+                      color={
+                        gender === "male"
+                          ? theme.colors.surface
+                          : theme.colors.primary
+                      }
+                    />
+                    <Text
+                      style={[
+                        styles.roleButtonText,
+                        gender === "male" && styles.activeRoleButtonText,
+                      ]}
+                    >
+                      Nam
+                    </Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[
+                      styles.roleButton,
+                      gender === "female" && styles.activeRoleButton,
+                    ]}
+                    onPress={() => setGender("female")}
+                  >
+                    <Icon
+                      name="female"
+                      size={24}
+                      color={
+                        gender === "female"
+                          ? theme.colors.surface
+                          : theme.colors.primary
+                      }
+                    />
+                    <Text
+                      style={[
+                        styles.roleButtonText,
+                        gender === "female" && styles.activeRoleButtonText,
+                      ]}
+                    >
+                      Nữ
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </>
           )}
 
           <View style={styles.inputContainer}>
@@ -205,14 +334,22 @@ const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin }) => {
             </View>
           )}
 
-          <TouchableOpacity style={styles.authButton} onPress={handleAuth}>
+          <TouchableOpacity
+            style={[styles.authButton, disabled && styles.disabledButton]}
+            onPress={handleAuth}
+            disabled={disabled}
+          >
             <LinearGradient
               colors={[theme.colors.primary, theme.colors.secondary]}
               style={styles.gradientButton}
             >
-              <Text style={styles.authButtonText}>
-                {isLogin ? "Đăng nhập" : "Đăng ký"}
-              </Text>
+              {loading ? (
+                <ActivityIndicator color={theme.colors.surface} />
+              ) : (
+                <Text style={styles.authButtonText}>
+                  {isLogin ? "Đăng nhập" : "Đăng ký"}
+                </Text>
+              )}
             </LinearGradient>
           </TouchableOpacity>
 
@@ -346,6 +483,9 @@ const styles = StyleSheet.create({
   gradientButton: {
     paddingVertical: theme.spacing.md,
     alignItems: "center",
+  },
+  disabledButton: {
+    opacity: 0.7,
   },
   authButtonText: {
     fontSize: 18,
