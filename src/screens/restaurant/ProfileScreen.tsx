@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   View,
   Text,
@@ -7,69 +7,159 @@ import {
   TouchableOpacity,
   Image,
   Alert,
+  ActivityIndicator,
+  RefreshControl,
 } from "react-native";
+import { useNavigation } from "@react-navigation/native";
+import { StackNavigationProp } from "@react-navigation/stack";
 import Icon from "react-native-vector-icons/MaterialIcons";
 import { LinearGradient } from "expo-linear-gradient";
 import { theme } from "../../theme/theme";
 import { useAuth } from "../../context/AuthContext";
+import { api } from "../../services/api";
+import UpdateRestaurantModal from "../../components/UpdateRestaurantModal";
+import UpdateAddressModal from "../../components/UpdateAddressModal";
+import { SellerStackParamList } from "../../navigation/SellerNavigator";
 
-const RestaurantProfileScreen = () => {
-  const { user, logout } = useAuth();
-  const handleLogout = () => {
-    Alert.alert("Đăng xuất", "Bạn có chắc chắn muốn đăng xuất?", [
-      { text: "Hủy", style: "cancel" },
-      { text: "Đăng xuất", style: "destructive", onPress: () => logout() },
-    ]);
+interface RestaurantProfileScreenProps {
+  restaurantId?: number;
+}
+
+type Restaurant = {
+  id: number;
+  name: string;
+  imageUrl?: string;
+  phone?: string;
+  openTime?: string;
+  closeTime?: string;
+  rating?: number;
+  status?: number;
+  addressId?: number;
+};
+
+type Address = {
+  id: number;
+  label: string;
+  province: string;
+  district: string;
+  ward: string;
+  street: string;
+  latitude: number;
+  longitude: number;
+};
+
+type NavigationProp = StackNavigationProp<SellerStackParamList>;
+
+const RestaurantProfileScreen: React.FC<RestaurantProfileScreenProps> = ({
+  restaurantId,
+}) => {
+  const navigation = useNavigation<NavigationProp>();
+  const { user } = useAuth();
+  const [restaurant, setRestaurant] = useState<Restaurant | null>(null);
+  const [address, setAddress] = useState<Address | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [showUpdateModal, setShowUpdateModal] = useState(false);
+  const [showAddressModal, setShowAddressModal] = useState(false);
+
+  const fetchRestaurant = useCallback(async () => {
+    if (!restaurantId) {
+      setLoading(false);
+      return;
+    }
+
+    try {
+      if (!refreshing) {
+        setLoading(true);
+      }
+      const restaurantData = await api.getRestaurantById(restaurantId);
+      const restaurantInfo = restaurantData as any;
+      setRestaurant(restaurantInfo as Restaurant);
+
+      // Load address nếu có addressId
+      if (restaurantInfo.addressId) {
+        try {
+          const addressData = await api.getAddressById(
+            restaurantInfo.addressId
+          );
+          setAddress(addressData as Address);
+        } catch (error) {
+          console.error("Error loading address:", error);
+        }
+      }
+    } catch (error: any) {
+      console.error("Error fetching restaurant:", error);
+      Alert.alert("Lỗi", "Không thể tải thông tin nhà hàng.");
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, [restaurantId, refreshing]);
+
+  useEffect(() => {
+    fetchRestaurant();
+  }, [fetchRestaurant]);
+
+  const onRefresh = useCallback(() => {
+    setRefreshing(true);
+    fetchRestaurant();
+  }, [fetchRestaurant]);
+
+  const handleUpdateSuccess = () => {
+    fetchRestaurant();
   };
+
+  const handleBack = () => {
+    navigation.navigate("SellerProfile");
+  };
+
+  const getStatusText = (status?: number) => {
+    switch (status) {
+      case 0:
+        return "Đóng cửa";
+      case 1:
+        return "Mở cửa";
+      case 2:
+        return "Tạm nghỉ";
+      default:
+        return "Chưa xác định";
+    }
+  };
+
+  if (loading && !restaurant) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color={theme.colors.primary} />
+      </View>
+    );
+  }
+
+  if (!restaurant) {
+    return (
+      <View style={styles.loadingContainer}>
+        <Text style={styles.errorText}>Không tìm thấy thông tin nhà hàng</Text>
+      </View>
+    );
+  }
 
   const menuItems = [
     {
       id: "1",
       title: "Thông tin nhà hàng",
       icon: "restaurant",
-      onPress: () => {},
+      onPress: () => setShowUpdateModal(true),
     },
     {
       id: "2",
       title: "Địa chỉ nhà hàng",
       icon: "place",
-      onPress: () => {},
-    },
-    {
-      id: "3",
-      title: "Giờ mở cửa",
-      icon: "schedule",
-      onPress: () => {},
-    },
-    {
-      id: "4",
-      title: "Phương thức thanh toán",
-      icon: "payment",
-      onPress: () => {},
-    },
-    {
-      id: "5",
-      title: "Thông báo",
-      icon: "notifications",
-      onPress: () => {},
-    },
-    {
-      id: "6",
-      title: "Cài đặt",
-      icon: "settings",
-      onPress: () => {},
-    },
-    {
-      id: "7",
-      title: "Trợ giúp & Hỗ trợ",
-      icon: "help",
-      onPress: () => {},
-    },
-    {
-      id: "8",
-      title: "Về ứng dụng",
-      icon: "info",
-      onPress: () => {},
+      onPress: () => {
+        if (address) {
+          setShowAddressModal(true);
+        } else {
+          Alert.alert("Lỗi", "Nhà hàng chưa có địa chỉ.");
+        }
+      },
     },
   ];
 
@@ -90,7 +180,12 @@ const RestaurantProfileScreen = () => {
   );
 
   return (
-    <ScrollView style={styles.container}>
+    <ScrollView
+      style={styles.container}
+      refreshControl={
+        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+      }
+    >
       {/* Profile Header */}
       <LinearGradient
         colors={[theme.colors.primary, theme.colors.secondary]}
@@ -101,37 +196,48 @@ const RestaurantProfileScreen = () => {
             <Image
               source={{
                 uri:
-                  user?.avatar ||
-                  "https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?fit=crop&w=200&h=200",
+                  restaurant.imageUrl ||
+                  "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?fit=crop&w=800&q=80",
               }}
               style={styles.avatar}
             />
-            <TouchableOpacity style={styles.editAvatarButton}>
-              <Icon name="camera-alt" size={16} color={theme.colors.surface} />
-            </TouchableOpacity>
           </View>
-          <Text style={styles.restaurantName}>{user?.username}</Text>
-          <Text style={styles.restaurantEmail}>{user?.email}</Text>
-          <Text style={styles.restaurantPhone}>
-            {user?.phone || "Chưa cập nhật"}
-          </Text>
+          <Text style={styles.restaurantName}>{restaurant.name}</Text>
+          <View style={styles.infoRow}>
+            <Icon name="star" size={16} color={theme.colors.accent} />
+            <Text style={styles.infoText}>
+              {restaurant.rating ? restaurant.rating.toFixed(1) : "Chưa có"}
+            </Text>
+          </View>
+          <View style={styles.infoRow}>
+            <Icon name="access-time" size={16} color={theme.colors.surface} />
+            <Text style={styles.infoText}>
+              {restaurant.openTime || "N/A"} - {restaurant.closeTime || "N/A"}
+            </Text>
+          </View>
+          <View style={styles.infoRow}>
+            <Icon name="info" size={16} color={theme.colors.surface} />
+            <Text style={styles.infoText}>
+              {getStatusText(restaurant.status)}
+            </Text>
+          </View>
         </View>
       </LinearGradient>
 
       {/* Stats */}
       <View style={styles.statsContainer}>
         <View style={styles.statItem}>
-          <Text style={styles.statNumber}>678</Text>
+          <Text style={styles.statNumber}>0</Text>
           <Text style={styles.statLabel}>Tổng đơn hàng</Text>
         </View>
         <View style={styles.statDivider} />
         <View style={styles.statItem}>
-          <Text style={styles.statNumber}>4.7</Text>
+          <Text style={styles.statNumber}>0.0</Text>
           <Text style={styles.statLabel}>Đánh giá TB</Text>
         </View>
         <View style={styles.statDivider} />
         <View style={styles.statItem}>
-          <Text style={styles.statNumber}>65M</Text>
+          <Text style={styles.statNumber}>0đ</Text>
           <Text style={styles.statLabel}>Doanh thu tháng</Text>
         </View>
       </View>
@@ -139,16 +245,34 @@ const RestaurantProfileScreen = () => {
       {/* Menu Items */}
       <View style={styles.menuContainer}>{menuItems.map(renderMenuItem)}</View>
 
-      {/* Logout Button */}
-      <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
-        <Icon name="logout" size={24} color={theme.colors.error} />
-        <Text style={styles.logoutText}>Đăng xuất</Text>
+      {/* Back Button */}
+      <TouchableOpacity style={styles.backButton} onPress={handleBack}>
+        <Icon name="arrow-back" size={24} color={theme.colors.primary} />
+        <Text style={styles.backButtonText}>Thoát</Text>
       </TouchableOpacity>
 
       {/* App Version */}
       <View style={styles.versionContainer}>
         <Text style={styles.versionText}>Phiên bản 1.0.0</Text>
       </View>
+
+      {/* Update Restaurant Modal */}
+      <UpdateRestaurantModal
+        visible={showUpdateModal}
+        onClose={() => setShowUpdateModal(false)}
+        onSuccess={handleUpdateSuccess}
+        restaurant={restaurant}
+      />
+
+      {/* Update Address Modal */}
+      {address && (
+        <UpdateAddressModal
+          visible={showAddressModal}
+          onClose={() => setShowAddressModal(false)}
+          onSuccess={handleUpdateSuccess}
+          address={address}
+        />
+      )}
     </ScrollView>
   );
 };
@@ -157,6 +281,16 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: theme.colors.background,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: theme.colors.background,
+  },
+  errorText: {
+    fontSize: 16,
+    color: theme.colors.error,
   },
   header: {
     paddingTop: theme.spacing.xl,
@@ -172,41 +306,29 @@ const styles = StyleSheet.create({
     marginBottom: theme.spacing.md,
   },
   avatar: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
+    width: 120,
+    height: 120,
+    borderRadius: 60,
     borderWidth: 4,
-    borderColor: theme.colors.surface,
-  },
-  editAvatarButton: {
-    position: "absolute",
-    bottom: 0,
-    right: 0,
-    backgroundColor: theme.colors.primary,
-    borderRadius: 15,
-    width: 30,
-    height: 30,
-    justifyContent: "center",
-    alignItems: "center",
-    borderWidth: 2,
     borderColor: theme.colors.surface,
   },
   restaurantName: {
     fontSize: 24,
     fontWeight: "bold",
     color: theme.colors.surface,
-    marginBottom: theme.spacing.xs,
+    marginBottom: theme.spacing.sm,
+    textAlign: "center",
   },
-  restaurantEmail: {
-    fontSize: 16,
-    color: theme.colors.surface,
+  infoRow: {
+    flexDirection: "row",
+    alignItems: "center",
     marginBottom: theme.spacing.xs,
-    opacity: 0.9,
+    gap: theme.spacing.xs,
   },
-  restaurantPhone: {
+  infoText: {
     fontSize: 14,
     color: theme.colors.surface,
-    opacity: 0.8,
+    opacity: 0.9,
   },
   statsContainer: {
     flexDirection: "row",
@@ -271,7 +393,7 @@ const styles = StyleSheet.create({
     color: theme.colors.text,
     flex: 1,
   },
-  logoutButton: {
+  backButton: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
@@ -281,13 +403,13 @@ const styles = StyleSheet.create({
     paddingVertical: theme.spacing.md,
     borderRadius: theme.roundness,
     borderWidth: 1,
-    borderColor: theme.colors.error,
+    borderColor: theme.colors.primary,
     ...theme.shadows.small,
   },
-  logoutText: {
+  backButtonText: {
     fontSize: 16,
     fontWeight: "500",
-    color: theme.colors.error,
+    color: theme.colors.primary,
     marginLeft: theme.spacing.sm,
   },
   versionContainer: {

@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState, useCallback } from "react";
 import {
   View,
   Text,
@@ -7,14 +7,21 @@ import {
   TouchableOpacity,
   Image,
   Alert,
+  RefreshControl,
 } from "react-native";
 import Icon from "react-native-vector-icons/MaterialIcons";
 import { LinearGradient } from "expo-linear-gradient";
 import { theme } from "../../theme/theme";
 import { useAuth } from "../../context/AuthContext";
+import { api } from "../../services/api";
+import UpdateUserModal from "../../components/UpdateUserModal";
+import ManageAddressModal from "../../components/ManageAddressModal";
 
 const ProfileScreen = () => {
-  const { user, logout } = useAuth();
+  const { user, setUser, logout } = useAuth();
+  const [refreshing, setRefreshing] = useState(false);
+  const [showUpdateModal, setShowUpdateModal] = useState(false);
+  const [showAddressModal, setShowAddressModal] = useState(false);
   const handleLogout = () => {
     Alert.alert("Đăng xuất", "Bạn có chắc chắn muốn đăng xuất?", [
       { text: "Hủy", style: "cancel" },
@@ -22,18 +29,42 @@ const ProfileScreen = () => {
     ]);
   };
 
+  const fetchUserProfile = useCallback(async () => {
+    if (!user?.id) {
+      return;
+    }
+
+    try {
+      const userData = await api.getUserProfile(user.id);
+      if (userData) {
+        setUser(userData as any);
+      }
+    } catch (error) {
+      console.error("Error fetching user profile:", error);
+    }
+  }, [user?.id, setUser]);
+
+  const onRefresh = useCallback(() => {
+    setRefreshing(true);
+    fetchUserProfile().finally(() => setRefreshing(false));
+  }, [fetchUserProfile]);
+
+  const handleUpdateSuccess = () => {
+    fetchUserProfile();
+  };
+
   const menuItems = [
     {
       id: "1",
       title: "Thông tin cá nhân",
       icon: "person",
-      onPress: () => {},
+      onPress: () => setShowUpdateModal(true),
     },
     {
       id: "2",
       title: "Địa chỉ giao hàng",
       icon: "place",
-      onPress: () => {},
+      onPress: () => setShowAddressModal(true),
     },
     {
       id: "3",
@@ -96,7 +127,12 @@ const ProfileScreen = () => {
   );
 
   return (
-    <ScrollView style={styles.container}>
+    <ScrollView
+      style={styles.container}
+      refreshControl={
+        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+      }
+    >
       {/* Profile Header */}
       <LinearGradient
         colors={[theme.colors.primary, theme.colors.secondary]}
@@ -125,18 +161,13 @@ const ProfileScreen = () => {
       {/* Stats */}
       <View style={styles.statsContainer}>
         <View style={styles.statItem}>
-          <Text style={styles.statNumber}>15</Text>
+          <Text style={styles.statNumber}>0</Text>
           <Text style={styles.statLabel}>Đơn hàng</Text>
         </View>
         <View style={styles.statDivider} />
         <View style={styles.statItem}>
-          <Text style={styles.statNumber}>4.8</Text>
+          <Text style={styles.statNumber}>0</Text>
           <Text style={styles.statLabel}>Đánh giá</Text>
-        </View>
-        <View style={styles.statDivider} />
-        <View style={styles.statItem}>
-          <Text style={styles.statNumber}>8</Text>
-          <Text style={styles.statLabel}>Nhà hàng yêu thích</Text>
         </View>
       </View>
 
@@ -153,6 +184,25 @@ const ProfileScreen = () => {
       <View style={styles.versionContainer}>
         <Text style={styles.versionText}>Phiên bản 1.0.0</Text>
       </View>
+
+      {/* Update User Modal */}
+      {user && (
+        <UpdateUserModal
+          visible={showUpdateModal}
+          onClose={() => setShowUpdateModal(false)}
+          onSuccess={handleUpdateSuccess}
+          user={user}
+        />
+      )}
+
+      {/* Manage Address Modal */}
+      {user && (
+        <ManageAddressModal
+          visible={showAddressModal}
+          onClose={() => setShowAddressModal(false)}
+          userId={user.id}
+        />
+      )}
     </ScrollView>
   );
 };

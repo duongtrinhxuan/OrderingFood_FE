@@ -7,7 +7,7 @@ import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 
 import AuthScreen from "./src/screens/AuthScreen";
 import ClientNavigator from "./src/navigation/ClientNavigator";
-import RestaurantTabNavigator from "./src/navigation/RestaurantTabNavigator";
+import SellerNavigator from "./src/navigation/SellerNavigator";
 import { theme } from "./src/theme/theme";
 import { AuthContext, AuthUser, UserRole } from "./src/context/AuthContext";
 
@@ -53,10 +53,7 @@ const App = () => {
                 ) : userRole === "client" ? (
                   <Stack.Screen name="Main" component={ClientNavigator} />
                 ) : (
-                  <Stack.Screen
-                    name="Restaurant"
-                    component={RestaurantTabNavigator}
-                  />
+                  <Stack.Screen name="Seller" component={SellerNavigator} />
                 )}
               </Stack.Navigator>
             </NavigationContainer>

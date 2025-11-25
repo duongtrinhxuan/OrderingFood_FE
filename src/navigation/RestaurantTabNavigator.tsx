@@ -1,7 +1,9 @@
 import React from "react";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
+import { RouteProp } from "@react-navigation/native";
 import Icon from "react-native-vector-icons/MaterialIcons";
 import { theme } from "../theme/theme";
+import { SellerStackParamList } from "./SellerNavigator";
 
 // Import screens
 import RestaurantDashboardScreen from "../screens/restaurant/DashboardScreen";
@@ -13,7 +15,14 @@ import RestaurantProfileScreen from "../screens/restaurant/ProfileScreen";
 
 const Tab = createBottomTabNavigator();
 
-const RestaurantTabNavigator = () => {
+type RestaurantTabNavigatorProps = {
+  route: RouteProp<SellerStackParamList, "RestaurantTabs">;
+};
+
+const RestaurantTabNavigator: React.FC<RestaurantTabNavigatorProps> = ({
+  route,
+}) => {
+  const { restaurantId } = route.params;
   return (
     <Tab.Navigator
       screenOptions={({ route }) => ({
@@ -79,11 +88,11 @@ const RestaurantTabNavigator = () => {
         component={OrdersManagementScreen}
         options={{ title: "Đơn hàng" }}
       />
-      <Tab.Screen
-        name="Menu"
-        component={MenuManagementScreen}
-        options={{ title: "Thực đơn" }}
-      />
+      <Tab.Screen name="Menu" options={{ title: "Thực đơn" }}>
+        {(props) => (
+          <MenuManagementScreen {...props} restaurantId={restaurantId} />
+        )}
+      </Tab.Screen>
       <Tab.Screen
         name="Revenue"
         component={RevenueScreen}
@@ -94,11 +103,11 @@ const RestaurantTabNavigator = () => {
         component={ReviewsScreen}
         options={{ title: "Đánh giá" }}
       />
-      <Tab.Screen
-        name="Profile"
-        component={RestaurantProfileScreen}
-        options={{ title: "Cá nhân" }}
-      />
+      <Tab.Screen name="Profile" options={{ title: "Thông tin" }}>
+        {(props) => (
+          <RestaurantProfileScreen {...props} restaurantId={restaurantId} />
+        )}
+      </Tab.Screen>
     </Tab.Navigator>
   );
 };

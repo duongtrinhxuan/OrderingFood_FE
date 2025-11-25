@@ -1,4 +1,4 @@
-import React, {useState} from 'react';
+import React, { useState, useEffect, useCallback } from "react";
 import {
   View,
   Text,
@@ -9,226 +9,439 @@ import {
   Image,
   Alert,
   Modal,
-} from 'react-native';
-import Icon from 'react-native-vector-icons/MaterialIcons';
-import {theme} from '../../theme/theme';
+  ScrollView,
+  ActivityIndicator,
+  RefreshControl,
+} from "react-native";
+import Icon from "react-native-vector-icons/MaterialIcons";
+import * as ImagePicker from "expo-image-picker";
+import { theme } from "../../theme/theme";
+import { api } from "../../services/api";
 
-// Mock menu data
-const mockMenuItems = [
-  {
-    id: '1',
-    name: 'Pizza Margherita',
-    description: 'Pizza với phô mai mozzarella, cà chua tươi và húng quế',
-    price: 250000,
-    image: 'https://via.placeholder.com/200x150',
-    category: 'Pizza',
-    isAvailable: true,
-  },
-  {
-    id: '2',
-    name: 'Chicken Burger',
-    description: 'Burger gà giòn với rau xanh và sốt đặc biệt',
-    price: 89000,
-    image: 'https://via.placeholder.com/200x150',
-    category: 'Burger',
-    isAvailable: true,
-  },
-  {
-    id: '3',
-    name: 'Big Mac',
-    description: 'Burger bò với phô mai, rau xanh và sốt Big Mac',
-    price: 75000,
-    image: 'https://via.placeholder.com/200x150',
-    category: 'Burger',
-    isAvailable: false,
-  },
-  {
-    id: '4',
-    name: 'Coca Cola',
-    description: 'Nước ngọt có ga Coca Cola 330ml',
-    price: 15000,
-    image: 'https://via.placeholder.com/200x150',
-    category: 'Drinks',
-    isAvailable: true,
-  },
-];
+interface MenuManagementScreenProps {
+  restaurantId: number;
+}
 
-const categories = ['Tất cả', 'Pizza', 'Burger', 'Drinks', 'Dessert'];
+type Menu = {
+  id: number;
+  name: string;
+  restaurantID: number;
+  isActive: boolean;
+};
 
-const MenuManagementScreen = () => {
-  const [menuItems, setMenuItems] = useState(mockMenuItems);
-  const [selectedCategory, setSelectedCategory] = useState('Tất cả');
-  const [showAddModal, setShowAddModal] = useState(false);
-  const [editingItem, setEditingItem] = useState(null);
-  const [newItem, setNewItem] = useState({
-    name: '',
-    description: '',
-    price: '',
-    category: 'Pizza',
-    isAvailable: true,
+type Product = {
+  id: number;
+  name: string;
+  description?: string;
+  price: number;
+  imageUrl?: string;
+  available: boolean;
+  restaurantID: number;
+  menuID?: number;
+  menu?: Menu;
+  categories?: Array<{ id: number; name: string }>;
+};
+
+type ProductCategory = {
+  id: number;
+  name: string;
+  isActive: boolean;
+};
+
+const MenuManagementScreen: React.FC<MenuManagementScreenProps> = ({
+  restaurantId,
+}) => {
+  const [menus, setMenus] = useState<Menu[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [categories, setCategories] = useState<ProductCategory[]>([]);
+  const [selectedMenuId, setSelectedMenuId] = useState<number | null>(null); // null = "Tất cả"
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [showMenuModal, setShowMenuModal] = useState(false);
+  const [showProductModal, setShowProductModal] = useState(false);
+  const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+  const [uploadingImage, setUploadingImage] = useState(false);
+
+  // Form states
+  const [menuForm, setMenuForm] = useState({ name: "" });
+  const [productForm, setProductForm] = useState({
+    name: "",
+    description: "",
+    price: "",
+    imageUrl: "",
+    available: true,
+    menuID: undefined as number | undefined,
+    selectedCategories: [] as number[],
   });
 
+  const fetchMenus = useCallback(async () => {
+    try {
+      const data = await api.getMenusByRestaurant(restaurantId);
+      setMenus(data as Menu[]);
+    } catch (error: any) {
+      console.error("Error fetching menus:", error);
+      Alert.alert("Lỗi", "Không thể tải danh sách menu.");
+    }
+  }, [restaurantId]);
+
+  const fetchProducts = useCallback(async () => {
+    try {
+      const data = await api.getProductsByRestaurant(restaurantId);
+      setProducts(data as Product[]);
+    } catch (error: any) {
+      console.error("Error fetching products:", error);
+      Alert.alert("Lỗi", "Không thể tải danh sách sản phẩm.");
+    }
+  }, [restaurantId]);
+
+  const fetchCategories = useCallback(async () => {
+    try {
+      const data = await api.getProductCategories();
+      setCategories(data as ProductCategory[]);
+    } catch (error: any) {
+      console.error("Error fetching categories:", error);
+    }
+  }, []);
+
+  const loadData = useCallback(async () => {
+    setLoading(true);
+    await Promise.all([fetchMenus(), fetchProducts(), fetchCategories()]);
+    setLoading(false);
+  }, [fetchMenus, fetchProducts, fetchCategories]);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await Promise.all([fetchMenus(), fetchProducts()]);
+    setRefreshing(false);
+  }, [fetchMenus, fetchProducts]);
+
+  const filteredProducts = selectedMenuId
+    ? products.filter((p) => p.menuID === selectedMenuId)
+    : products;
+
   const formatPrice = (price: number) => {
-    return new Intl.NumberFormat('vi-VN', {
-      style: 'currency',
-      currency: 'VND',
+    return new Intl.NumberFormat("vi-VN", {
+      style: "currency",
+      currency: "VND",
     }).format(price);
   };
 
-  const filteredItems = menuItems.filter(item =>
-    selectedCategory === 'Tất cả' || item.category === selectedCategory
-  );
+  // Menu handlers
+  const handleCreateMenu = async () => {
+    if (!menuForm.name.trim()) {
+      Alert.alert("Lỗi", "Vui lòng nhập tên menu.");
+      return;
+    }
 
-  const toggleAvailability = (id: string) => {
-    setMenuItems(prevItems =>
-      prevItems.map(item =>
-        item.id === id ? {...item, isAvailable: !item.isAvailable} : item
-      )
-    );
+    try {
+      await api.createMenu({
+        name: menuForm.name,
+        restaurantID: restaurantId,
+        isActive: true,
+      });
+      Alert.alert("Thành công", "Menu đã được tạo.");
+      setMenuForm({ name: "" });
+      setShowMenuModal(false);
+      await fetchMenus();
+    } catch (error: any) {
+      Alert.alert("Lỗi", error?.message || "Không thể tạo menu.");
+    }
   };
 
-  const deleteItem = (id: string) => {
-    Alert.alert(
-      'Xóa món ăn',
-      'Bạn có chắc chắn muốn xóa món ăn này?',
-      [
-        {text: 'Hủy', style: 'cancel'},
-        {
-          text: 'Xóa',
-          style: 'destructive',
-          onPress: () =>
-            setMenuItems(prevItems => prevItems.filter(item => item.id !== id)),
+  // Product handlers
+  const handlePickImage = async () => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== "granted") {
+      Alert.alert(
+        "Quyền truy cập bị từ chối",
+        "Ứng dụng cần quyền truy cập ảnh để upload ảnh sản phẩm."
+      );
+      return;
+    }
+
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        allowsEditing: true,
+        quality: 0.7,
+        aspect: [16, 9],
+      });
+
+      if (result.canceled || !result.assets?.length) {
+        return;
+      }
+
+      setUploadingImage(true);
+      const uploadResult = await api.uploadAvatar(result.assets[0].uri);
+      let imageUrl = uploadResult.url;
+
+      if (imageUrl.includes("localhost") || imageUrl.includes("127.0.0.1")) {
+        const apiBaseUrl =
+          process.env.EXPO_PUBLIC_API_URL?.replace(/\/$/, "") ||
+          "http://192.168.1.9:5000";
+        const urlPath = imageUrl.split("/uploads/")[1];
+        imageUrl = `${apiBaseUrl}/uploads/${urlPath}`;
+      }
+
+      setProductForm({ ...productForm, imageUrl });
+      Alert.alert("Thành công", "Ảnh đã được upload.");
+    } catch (error: any) {
+      Alert.alert("Lỗi", error?.message || "Không thể upload ảnh.");
+    } finally {
+      setUploadingImage(false);
+    }
+  };
+
+  const handleToggleCategory = (categoryId: number) => {
+    setProductForm((prev) => {
+      const isSelected = prev.selectedCategories.includes(categoryId);
+      return {
+        ...prev,
+        selectedCategories: isSelected
+          ? prev.selectedCategories.filter((id) => id !== categoryId)
+          : [...prev.selectedCategories, categoryId],
+      };
+    });
+  };
+
+  const handleCreateProduct = async () => {
+    if (!productForm.name.trim()) {
+      Alert.alert("Lỗi", "Vui lòng nhập tên sản phẩm.");
+      return;
+    }
+    if (!productForm.price || parseFloat(productForm.price) <= 0) {
+      Alert.alert("Lỗi", "Vui lòng nhập giá hợp lệ.");
+      return;
+    }
+
+    try {
+      const product = await api.createProduct({
+        name: productForm.name,
+        description: productForm.description || undefined,
+        price: parseFloat(productForm.price),
+        imageUrl: productForm.imageUrl || undefined,
+        available: productForm.available,
+        restaurantID: restaurantId,
+        menuID: productForm.menuID,
+        isActive: true,
+      });
+
+      // Tạo category-product-maps
+      for (const categoryId of productForm.selectedCategories) {
+        try {
+          await api.createCategoryProductMap({
+            productId: (product as any).id,
+            categoryId,
+          });
+        } catch (error) {
+          console.error("Error creating category map:", error);
+        }
+      }
+
+      Alert.alert("Thành công", "Sản phẩm đã được tạo.");
+      resetProductForm();
+      setShowProductModal(false);
+      await fetchProducts();
+    } catch (error: any) {
+      Alert.alert("Lỗi", error?.message || "Không thể tạo sản phẩm.");
+    }
+  };
+
+  const handleUpdateProduct = async () => {
+    if (!editingProduct) return;
+    if (!productForm.name.trim()) {
+      Alert.alert("Lỗi", "Vui lòng nhập tên sản phẩm.");
+      return;
+    }
+    if (!productForm.price || parseFloat(productForm.price) <= 0) {
+      Alert.alert("Lỗi", "Vui lòng nhập giá hợp lệ.");
+      return;
+    }
+
+    try {
+      await api.updateProduct(editingProduct.id, {
+        name: productForm.name,
+        description: productForm.description || undefined,
+        price: parseFloat(productForm.price),
+        imageUrl: productForm.imageUrl || undefined,
+        available: productForm.available,
+        menuID: productForm.menuID,
+      });
+
+      Alert.alert("Thành công", "Sản phẩm đã được cập nhật.");
+      resetProductForm();
+      setEditingProduct(null);
+      setShowProductModal(false);
+      await fetchProducts();
+    } catch (error: any) {
+      Alert.alert("Lỗi", error?.message || "Không thể cập nhật sản phẩm.");
+    }
+  };
+
+  const handleDeleteProduct = (product: Product) => {
+    Alert.alert("Xóa sản phẩm", "Bạn có chắc chắn muốn xóa sản phẩm này?", [
+      { text: "Hủy", style: "cancel" },
+      {
+        text: "Xóa",
+        style: "destructive",
+        onPress: async () => {
+          try {
+            await api.deleteProduct(product.id);
+            Alert.alert("Thành công", "Sản phẩm đã được xóa.");
+            await fetchProducts();
+          } catch (error: any) {
+            Alert.alert("Lỗi", error?.message || "Không thể xóa sản phẩm.");
+          }
         },
-      ]
-    );
+      },
+    ]);
   };
 
-  const handleAddItem = () => {
-    if (!newItem.name || !newItem.price) {
-      Alert.alert('Lỗi', 'Vui lòng nhập đầy đủ thông tin');
-      return;
-    }
-
-    const item = {
-      id: Date.now().toString(),
-      ...newItem,
-      price: parseInt(newItem.price),
-      image: 'https://via.placeholder.com/200x150',
-    };
-
-    setMenuItems(prevItems => [...prevItems, item]);
-    setNewItem({
-      name: '',
-      description: '',
-      price: '',
-      category: 'Pizza',
-      isAvailable: true,
+  const handleEditProduct = (product: Product) => {
+    setEditingProduct(product);
+    setProductForm({
+      name: product.name,
+      description: product.description || "",
+      price: product.price.toString(),
+      imageUrl: product.imageUrl || "",
+      available: product.available,
+      menuID: product.menuID,
+      selectedCategories: product.categories?.map((c) => c.id) || [],
     });
-    setShowAddModal(false);
+    setShowProductModal(true);
   };
 
-  const handleEditItem = (item: any) => {
-    setEditingItem(item);
-    setNewItem({
-      name: item.name,
-      description: item.description,
-      price: item.price.toString(),
-      category: item.category,
-      isAvailable: item.isAvailable,
+  const resetProductForm = () => {
+    setProductForm({
+      name: "",
+      description: "",
+      price: "",
+      imageUrl: "",
+      available: true,
+      menuID: undefined,
+      selectedCategories: [],
     });
-    setShowAddModal(true);
+    setEditingProduct(null);
   };
 
-  const handleUpdateItem = () => {
-    if (!newItem.name || !newItem.price) {
-      Alert.alert('Lỗi', 'Vui lòng nhập đầy đủ thông tin');
-      return;
-    }
-
-    setMenuItems(prevItems =>
-      prevItems.map(item =>
-        item.id === editingItem?.id
-          ? {
-              ...item,
-              ...newItem,
-              price: parseInt(newItem.price),
-            }
-          : item
-      )
-    );
-
-    setNewItem({
-      name: '',
-      description: '',
-      price: '',
-      category: 'Pizza',
-      isAvailable: true,
-    });
-    setEditingItem(null);
-    setShowAddModal(false);
-  };
-
-  const renderCategoryFilter = (category: string) => (
-    <TouchableOpacity
-      key={category}
-      style={[
-        styles.filterChip,
-        selectedCategory === category && styles.selectedFilterChip,
-      ]}
-      onPress={() => setSelectedCategory(category)}>
-      <Text
-        style={[
-          styles.filterText,
-          selectedCategory === category && styles.selectedFilterText,
-        ]}>
-        {category}
-      </Text>
-    </TouchableOpacity>
-  );
-
-  const renderMenuItem = ({item}: {item: any}) => (
-    <View style={styles.menuItemCard}>
-      <Image source={{uri: item.image}} style={styles.itemImage} />
-      
-      <View style={styles.itemContent}>
-        <View style={styles.itemHeader}>
-          <Text style={styles.itemName}>{item.name}</Text>
-          <TouchableOpacity
+  const renderMenuChip = (menu: Menu | "all" | "add") => {
+    if (menu === "all") {
+      const isSelected = selectedMenuId === null;
+      return (
+        <TouchableOpacity
+          key="all"
+          style={[styles.menuChip, isSelected && styles.selectedMenuChip]}
+          onPress={() => setSelectedMenuId(null)}
+        >
+          <Text
             style={[
-              styles.availabilityButton,
-              {backgroundColor: item.isAvailable ? theme.colors.success : theme.colors.error},
+              styles.menuChipText,
+              isSelected && styles.selectedMenuChipText,
             ]}
-            onPress={() => toggleAvailability(item.id)}>
-            <Text style={styles.availabilityText}>
-              {item.isAvailable ? 'Có' : 'Hết'}
-            </Text>
-          </TouchableOpacity>
-        </View>
+          >
+            Tất cả
+          </Text>
+        </TouchableOpacity>
+      );
+    }
 
-        <Text style={styles.itemDescription} numberOfLines={2}>
-          {item.description}
+    if (menu === "add") {
+      return (
+        <TouchableOpacity
+          key="add"
+          style={[styles.menuChip, styles.addMenuChip]}
+          onPress={() => setShowMenuModal(true)}
+        >
+          <Icon name="add" size={16} color={theme.colors.primary} />
+          <Text style={styles.addMenuChipText}>Thêm mới menu</Text>
+        </TouchableOpacity>
+      );
+    }
+
+    const isSelected = selectedMenuId === menu.id;
+    return (
+      <TouchableOpacity
+        key={menu.id}
+        style={[styles.menuChip, isSelected && styles.selectedMenuChip]}
+        onPress={() => setSelectedMenuId(menu.id)}
+      >
+        <Text
+          style={[
+            styles.menuChipText,
+            isSelected && styles.selectedMenuChipText,
+          ]}
+        >
+          {menu.name}
         </Text>
+      </TouchableOpacity>
+    );
+  };
 
-        <View style={styles.itemFooter}>
-          <Text style={styles.itemPrice}>{formatPrice(item.price)}</Text>
-          <Text style={styles.itemCategory}>{item.category}</Text>
+  const renderProduct = ({ item }: { item: Product }) => (
+    <View style={styles.productCard}>
+      <Image
+        source={{
+          uri:
+            item.imageUrl ||
+            "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?fit=crop&w=800&q=80",
+        }}
+        style={styles.productImage}
+      />
+      <View style={styles.productContent}>
+        <View style={styles.productHeader}>
+          <Text style={styles.productName}>{item.name}</Text>
+          <View
+            style={[
+              styles.availabilityBadge,
+              {
+                backgroundColor: item.available
+                  ? theme.colors.success
+                  : theme.colors.error,
+              },
+            ]}
+          >
+            <Text style={styles.availabilityText}>
+              {item.available ? "Có" : "Hết"}
+            </Text>
+          </View>
+        </View>
+        <Text style={styles.productDescription} numberOfLines={2}>
+          {item.description || "Không có mô tả"}
+        </Text>
+        <View style={styles.productFooter}>
+          <Text style={styles.productPrice}>{formatPrice(item.price)}</Text>
+          {item.menu && (
+            <Text style={styles.productMenu}>{item.menu.name}</Text>
+          )}
         </View>
       </View>
-
-      <View style={styles.itemActions}>
+      <View style={styles.productActions}>
         <TouchableOpacity
           style={styles.actionButton}
-          onPress={() => handleEditItem(item)}>
+          onPress={() => handleEditProduct(item)}
+        >
           <Icon name="edit" size={20} color={theme.colors.primary} />
         </TouchableOpacity>
         <TouchableOpacity
           style={styles.actionButton}
-          onPress={() => deleteItem(item.id)}>
+          onPress={() => handleDeleteProduct(item)}
+        >
           <Icon name="delete" size={20} color={theme.colors.error} />
         </TouchableOpacity>
       </View>
     </View>
   );
+
+  if (loading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color={theme.colors.primary} />
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
@@ -237,113 +450,222 @@ const MenuManagementScreen = () => {
         <Text style={styles.headerTitle}>Quản lý thực đơn</Text>
         <TouchableOpacity
           style={styles.addButton}
-          onPress={() => setShowAddModal(true)}>
+          onPress={() => {
+            resetProductForm();
+            setShowProductModal(true);
+          }}
+        >
           <Icon name="add" size={24} color={theme.colors.surface} />
         </TouchableOpacity>
       </View>
 
-      {/* Category Filters */}
-      <View style={styles.filtersContainer}>
+      {/* Menu Filters */}
+      <View style={styles.menusContainer}>
         <FlatList
-          data={categories}
-          renderItem={({item}) => renderCategoryFilter(item)}
-          keyExtractor={item => item}
+          data={["all", ...menus, "add"]}
+          renderItem={({ item }) =>
+            renderMenuChip(item as Menu | "all" | "add")
+          }
+          keyExtractor={(item, index) =>
+            typeof item === "string" ? item : `menu-${item.id}`
+          }
           horizontal
           showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.filtersScroll}
+          contentContainerStyle={styles.menusScroll}
         />
       </View>
 
-      {/* Menu Items */}
+      {/* Products List */}
       <FlatList
-        data={filteredItems}
-        renderItem={renderMenuItem}
-        keyExtractor={item => item.id}
+        data={filteredProducts}
+        renderItem={renderProduct}
+        keyExtractor={(item) => item.id.toString()}
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.menuList}
+        contentContainerStyle={styles.productsList}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+        }
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
-            <Icon name="restaurant-menu" size={64} color={theme.colors.mediumGray} />
-            <Text style={styles.emptyText}>Chưa có món ăn</Text>
+            <Icon
+              name="restaurant-menu"
+              size={64}
+              color={theme.colors.mediumGray}
+            />
+            <Text style={styles.emptyText}>Chưa có sản phẩm</Text>
             <Text style={styles.emptySubtext}>
-              Thêm món ăn đầu tiên vào thực đơn
+              Thêm sản phẩm đầu tiên vào thực đơn
             </Text>
           </View>
         }
       />
 
-      {/* Add/Edit Modal */}
+      {/* Create Menu Modal */}
       <Modal
-        visible={showAddModal}
+        visible={showMenuModal}
         animationType="slide"
-        presentationStyle="pageSheet">
+        transparent={true}
+        onRequestClose={() => setShowMenuModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Thêm menu mới</Text>
+              <TouchableOpacity onPress={() => setShowMenuModal(false)}>
+                <Icon name="close" size={24} color={theme.colors.text} />
+              </TouchableOpacity>
+            </View>
+            <View style={styles.modalBody}>
+              <Text style={styles.label}>Tên menu *</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="Nhập tên menu"
+                value={menuForm.name}
+                onChangeText={(text) => setMenuForm({ name: text })}
+              />
+              <TouchableOpacity
+                style={styles.submitButton}
+                onPress={handleCreateMenu}
+              >
+                <Text style={styles.submitButtonText}>Xác nhận</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Create/Edit Product Modal */}
+      <Modal
+        visible={showProductModal}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => {
+          setShowProductModal(false);
+          resetProductForm();
+        }}
+      >
         <View style={styles.modalContainer}>
           <View style={styles.modalHeader}>
-            <TouchableOpacity onPress={() => setShowAddModal(false)}>
+            <TouchableOpacity
+              onPress={() => {
+                setShowProductModal(false);
+                resetProductForm();
+              }}
+            >
               <Text style={styles.cancelText}>Hủy</Text>
             </TouchableOpacity>
             <Text style={styles.modalTitle}>
-              {editingItem ? 'Sửa món ăn' : 'Thêm món ăn'}
+              {editingProduct ? "Sửa sản phẩm" : "Thêm sản phẩm"}
             </Text>
-            <TouchableOpacity onPress={editingItem ? handleUpdateItem : handleAddItem}>
+            <TouchableOpacity
+              onPress={
+                editingProduct ? handleUpdateProduct : handleCreateProduct
+              }
+            >
               <Text style={styles.saveText}>Lưu</Text>
             </TouchableOpacity>
           </View>
 
-          <View style={styles.modalContent}>
+          <ScrollView style={styles.modalBody}>
             <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>Tên món ăn *</Text>
+              <Text style={styles.label}>Tên sản phẩm *</Text>
               <TextInput
                 style={styles.input}
-                value={newItem.name}
-                onChangeText={text => setNewItem({...newItem, name: text})}
-                placeholder="Nhập tên món ăn"
-                placeholderTextColor={theme.colors.placeholder}
+                value={productForm.name}
+                onChangeText={(text) =>
+                  setProductForm({ ...productForm, name: text })
+                }
+                placeholder="Nhập tên sản phẩm"
               />
             </View>
 
             <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>Mô tả</Text>
+              <Text style={styles.label}>Mô tả</Text>
               <TextInput
                 style={[styles.input, styles.textArea]}
-                value={newItem.description}
-                onChangeText={text => setNewItem({...newItem, description: text})}
-                placeholder="Nhập mô tả món ăn"
-                placeholderTextColor={theme.colors.placeholder}
+                value={productForm.description}
+                onChangeText={(text) =>
+                  setProductForm({ ...productForm, description: text })
+                }
+                placeholder="Nhập mô tả sản phẩm"
                 multiline
                 numberOfLines={3}
               />
             </View>
 
             <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>Giá (VND) *</Text>
+              <Text style={styles.label}>Giá (VND) *</Text>
               <TextInput
                 style={styles.input}
-                value={newItem.price}
-                onChangeText={text => setNewItem({...newItem, price: text})}
-                placeholder="Nhập giá món ăn"
-                placeholderTextColor={theme.colors.placeholder}
+                value={productForm.price}
+                onChangeText={(text) =>
+                  setProductForm({ ...productForm, price: text })
+                }
+                placeholder="Nhập giá sản phẩm"
                 keyboardType="numeric"
               />
             </View>
 
             <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>Danh mục</Text>
-              <View style={styles.categoryButtons}>
-                {categories.slice(1).map(category => (
+              <Text style={styles.label}>Ảnh sản phẩm</Text>
+              <TouchableOpacity
+                style={styles.imagePicker}
+                onPress={handlePickImage}
+                disabled={uploadingImage}
+              >
+                {productForm.imageUrl ? (
+                  <Image
+                    source={{ uri: productForm.imageUrl }}
+                    style={styles.previewImage}
+                  />
+                ) : (
+                  <View style={styles.imagePlaceholder}>
+                    {uploadingImage ? (
+                      <ActivityIndicator color={theme.colors.primary} />
+                    ) : (
+                      <>
+                        <Icon
+                          name="add-photo-alternate"
+                          size={32}
+                          color={theme.colors.primary}
+                        />
+                        <Text style={styles.imagePlaceholderText}>
+                          Chọn ảnh sản phẩm
+                        </Text>
+                      </>
+                    )}
+                  </View>
+                )}
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Menu</Text>
+              <View style={styles.menuSelectContainer}>
+                {menus.map((menu) => (
                   <TouchableOpacity
-                    key={category}
+                    key={menu.id}
                     style={[
-                      styles.categoryButton,
-                      newItem.category === category && styles.selectedCategoryButton,
+                      styles.menuSelectButton,
+                      productForm.menuID === menu.id &&
+                        styles.selectedMenuSelectButton,
                     ]}
-                    onPress={() => setNewItem({...newItem, category})}>
+                    onPress={() =>
+                      setProductForm({
+                        ...productForm,
+                        menuID:
+                          productForm.menuID === menu.id ? undefined : menu.id,
+                      })
+                    }
+                  >
                     <Text
                       style={[
-                        styles.categoryButtonText,
-                        newItem.category === category && styles.selectedCategoryButtonText,
-                      ]}>
-                      {category}
+                        styles.menuSelectButtonText,
+                        productForm.menuID === menu.id &&
+                          styles.selectedMenuSelectButtonText,
+                      ]}
+                    >
+                      {menu.name}
                     </Text>
                   </TouchableOpacity>
                 ))}
@@ -351,18 +673,62 @@ const MenuManagementScreen = () => {
             </View>
 
             <View style={styles.inputGroup}>
+              <Text style={styles.label}>Danh mục sản phẩm</Text>
+              <View style={styles.categoriesContainer}>
+                {categories.map((category) => {
+                  const isSelected = productForm.selectedCategories.includes(
+                    category.id
+                  );
+                  return (
+                    <TouchableOpacity
+                      key={category.id}
+                      style={[
+                        styles.categoryChip,
+                        isSelected && styles.selectedCategoryChip,
+                      ]}
+                      onPress={() => handleToggleCategory(category.id)}
+                    >
+                      <Text
+                        style={[
+                          styles.categoryChipText,
+                          isSelected && styles.selectedCategoryChipText,
+                        ]}
+                      >
+                        {category.name}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </View>
+
+            <View style={styles.inputGroup}>
               <TouchableOpacity
                 style={styles.availabilityToggle}
-                onPress={() => setNewItem({...newItem, isAvailable: !newItem.isAvailable})}>
+                onPress={() =>
+                  setProductForm({
+                    ...productForm,
+                    available: !productForm.available,
+                  })
+                }
+              >
                 <Icon
-                  name={newItem.isAvailable ? 'check-circle' : 'radio-button-unchecked'}
+                  name={
+                    productForm.available
+                      ? "check-circle"
+                      : "radio-button-unchecked"
+                  }
                   size={24}
-                  color={newItem.isAvailable ? theme.colors.success : theme.colors.mediumGray}
+                  color={
+                    productForm.available
+                      ? theme.colors.success
+                      : theme.colors.mediumGray
+                  }
                 />
                 <Text style={styles.availabilityLabel}>Có sẵn</Text>
               </TouchableOpacity>
             </View>
-          </View>
+          </ScrollView>
         </View>
       </Modal>
     </View>
@@ -374,10 +740,16 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: theme.colors.background,
   },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: theme.colors.background,
+  },
   header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
     paddingHorizontal: theme.spacing.lg,
     paddingVertical: theme.spacing.md,
     backgroundColor: theme.colors.surface,
@@ -386,7 +758,7 @@ const styles = StyleSheet.create({
   },
   headerTitle: {
     fontSize: 20,
-    fontWeight: 'bold',
+    fontWeight: "bold",
     color: theme.colors.text,
   },
   addButton: {
@@ -394,19 +766,19 @@ const styles = StyleSheet.create({
     borderRadius: theme.roundness / 2,
     width: 40,
     height: 40,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
   },
-  filtersContainer: {
+  menusContainer: {
     backgroundColor: theme.colors.surface,
     paddingVertical: theme.spacing.md,
     borderBottomWidth: 1,
     borderBottomColor: theme.colors.border,
   },
-  filtersScroll: {
+  menusScroll: {
     paddingHorizontal: theme.spacing.lg,
   },
-  filterChip: {
+  menuChip: {
     backgroundColor: theme.colors.background,
     paddingHorizontal: theme.spacing.md,
     paddingVertical: theme.spacing.sm,
@@ -415,76 +787,87 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: theme.colors.border,
   },
-  selectedFilterChip: {
+  selectedMenuChip: {
     backgroundColor: theme.colors.primary,
     borderColor: theme.colors.primary,
   },
-  filterText: {
+  menuChipText: {
     fontSize: 14,
-    fontWeight: '500',
+    fontWeight: "500",
     color: theme.colors.mediumGray,
   },
-  selectedFilterText: {
+  selectedMenuChipText: {
     color: theme.colors.surface,
   },
-  menuList: {
+  addMenuChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing.xs,
+    borderColor: theme.colors.primary,
+  },
+  addMenuChipText: {
+    fontSize: 14,
+    fontWeight: "500",
+    color: theme.colors.primary,
+  },
+  productsList: {
     padding: theme.spacing.lg,
   },
-  menuItemCard: {
-    flexDirection: 'row',
+  productCard: {
+    flexDirection: "row",
     backgroundColor: theme.colors.surface,
     borderRadius: theme.roundness,
     padding: theme.spacing.md,
     marginBottom: theme.spacing.md,
     ...theme.shadows.small,
   },
-  itemImage: {
+  productImage: {
     width: 80,
     height: 80,
     borderRadius: theme.roundness / 2,
     marginRight: theme.spacing.md,
   },
-  itemContent: {
+  productContent: {
     flex: 1,
   },
-  itemHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+  productHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
     marginBottom: theme.spacing.xs,
   },
-  itemName: {
+  productName: {
     fontSize: 16,
-    fontWeight: 'bold',
+    fontWeight: "bold",
     color: theme.colors.text,
     flex: 1,
   },
-  availabilityButton: {
+  availabilityBadge: {
     paddingHorizontal: theme.spacing.sm,
     paddingVertical: theme.spacing.xs,
     borderRadius: theme.roundness / 2,
   },
   availabilityText: {
     fontSize: 12,
-    fontWeight: 'bold',
+    fontWeight: "bold",
     color: theme.colors.surface,
   },
-  itemDescription: {
+  productDescription: {
     fontSize: 12,
     color: theme.colors.mediumGray,
     marginBottom: theme.spacing.sm,
   },
-  itemFooter: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+  productFooter: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
   },
-  itemPrice: {
+  productPrice: {
     fontSize: 16,
-    fontWeight: 'bold',
+    fontWeight: "bold",
     color: theme.colors.primary,
   },
-  itemCategory: {
+  productMenu: {
     fontSize: 12,
     color: theme.colors.mediumGray,
     backgroundColor: theme.colors.lightGray,
@@ -492,8 +875,8 @@ const styles = StyleSheet.create({
     paddingVertical: theme.spacing.xs,
     borderRadius: theme.roundness / 2,
   },
-  itemActions: {
-    justifyContent: 'space-between',
+  productActions: {
+    justifyContent: "space-between",
     paddingLeft: theme.spacing.sm,
   },
   actionButton: {
@@ -502,13 +885,13 @@ const styles = StyleSheet.create({
   },
   emptyContainer: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
     paddingVertical: theme.spacing.xxl,
   },
   emptyText: {
     fontSize: 18,
-    fontWeight: 'bold',
+    fontWeight: "bold",
     color: theme.colors.mediumGray,
     marginTop: theme.spacing.md,
   },
@@ -516,46 +899,58 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: theme.colors.mediumGray,
     marginTop: theme.spacing.sm,
-    textAlign: 'center',
+    textAlign: "center",
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  modalContent: {
+    backgroundColor: theme.colors.surface,
+    borderRadius: theme.roundness * 2,
+    padding: theme.spacing.lg,
+    width: "80%",
   },
   modalContainer: {
     flex: 1,
     backgroundColor: theme.colors.background,
   },
   modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
     paddingHorizontal: theme.spacing.lg,
     paddingVertical: theme.spacing.md,
     backgroundColor: theme.colors.surface,
     borderBottomWidth: 1,
     borderBottomColor: theme.colors.border,
   },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: "bold",
+    color: theme.colors.text,
+  },
   cancelText: {
     fontSize: 16,
     color: theme.colors.mediumGray,
   },
-  modalTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: theme.colors.text,
-  },
   saveText: {
     fontSize: 16,
     color: theme.colors.primary,
-    fontWeight: 'bold',
+    fontWeight: "bold",
   },
-  modalContent: {
+  modalBody: {
     flex: 1,
     padding: theme.spacing.lg,
   },
   inputGroup: {
     marginBottom: theme.spacing.lg,
   },
-  inputLabel: {
+  label: {
     fontSize: 16,
-    fontWeight: '500',
+    fontWeight: "500",
     color: theme.colors.text,
     marginBottom: theme.spacing.sm,
   },
@@ -571,41 +966,101 @@ const styles = StyleSheet.create({
   },
   textArea: {
     height: 80,
-    textAlignVertical: 'top',
+    textAlignVertical: "top",
   },
-  categoryButtons: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
+  imagePicker: {
+    marginTop: theme.spacing.xs,
   },
-  categoryButton: {
+  previewImage: {
+    width: "100%",
+    height: 200,
+    borderRadius: theme.roundness,
+    resizeMode: "cover",
+  },
+  imagePlaceholder: {
+    width: "100%",
+    height: 200,
+    borderRadius: theme.roundness,
+    borderWidth: 2,
+    borderColor: theme.colors.border,
+    borderStyle: "dashed",
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: theme.colors.background,
+  },
+  imagePlaceholderText: {
+    marginTop: theme.spacing.sm,
+    color: theme.colors.mediumGray,
+    fontSize: 14,
+  },
+  menuSelectContainer: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: theme.spacing.sm,
+  },
+  menuSelectButton: {
     backgroundColor: theme.colors.surface,
     paddingHorizontal: theme.spacing.md,
     paddingVertical: theme.spacing.sm,
     borderRadius: theme.roundness,
-    marginRight: theme.spacing.sm,
-    marginBottom: theme.spacing.sm,
     borderWidth: 1,
     borderColor: theme.colors.border,
   },
-  selectedCategoryButton: {
+  selectedMenuSelectButton: {
     backgroundColor: theme.colors.primary,
     borderColor: theme.colors.primary,
   },
-  categoryButtonText: {
+  menuSelectButtonText: {
     fontSize: 14,
     color: theme.colors.mediumGray,
   },
-  selectedCategoryButtonText: {
+  selectedMenuSelectButtonText: {
+    color: theme.colors.surface,
+  },
+  categoriesContainer: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: theme.spacing.sm,
+  },
+  categoryChip: {
+    backgroundColor: theme.colors.surface,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.sm,
+    borderRadius: theme.roundness,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+  },
+  selectedCategoryChip: {
+    backgroundColor: theme.colors.primary,
+    borderColor: theme.colors.primary,
+  },
+  categoryChipText: {
+    fontSize: 14,
+    color: theme.colors.mediumGray,
+  },
+  selectedCategoryChipText: {
     color: theme.colors.surface,
   },
   availabilityToggle: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
   },
   availabilityLabel: {
     fontSize: 16,
     color: theme.colors.text,
     marginLeft: theme.spacing.sm,
+  },
+  submitButton: {
+    backgroundColor: theme.colors.primary,
+    paddingVertical: theme.spacing.md,
+    borderRadius: theme.roundness,
+    alignItems: "center",
+    marginTop: theme.spacing.md,
+  },
+  submitButtonText: {
+    color: theme.colors.surface,
+    fontSize: 16,
+    fontWeight: "600",
   },
 });
 
