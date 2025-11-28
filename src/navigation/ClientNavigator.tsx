@@ -2,6 +2,8 @@ import React from "react";
 import { createStackNavigator } from "@react-navigation/stack";
 import MainTabNavigator from "./MainTabNavigator";
 import RestaurantDetailScreen from "../screens/client/RestaurantDetailScreen";
+import CheckoutScreen from "../screens/client/CheckoutScreen";
+import OrderDetailScreen from "../screens/client/OrderDetailScreen";
 
 const Stack = createStackNavigator();
 
@@ -16,7 +18,26 @@ const ClientNavigator = () => {
       <Stack.Screen
         name="RestaurantDetail"
         component={RestaurantDetailScreen}
-        options={{ title: "Chi tiết nhà hàng" }}
+        options={{
+          headerShown: false,
+          presentation: "modal",
+        }}
+      />
+      <Stack.Screen
+        name="Checkout"
+        component={CheckoutScreen}
+        options={{
+          headerShown: false,
+          presentation: "modal",
+        }}
+      />
+      <Stack.Screen
+        name="OrderDetail"
+        component={OrderDetailScreen}
+        options={{
+          headerShown: false,
+          presentation: "modal",
+        }}
       />
     </Stack.Navigator>
   );
