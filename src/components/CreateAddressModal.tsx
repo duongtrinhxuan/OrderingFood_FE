@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import {
   View,
   Text,
@@ -13,6 +13,7 @@ import {
 import Icon from "react-native-vector-icons/MaterialIcons";
 import { theme } from "../theme/theme";
 import { api } from "../services/api";
+import MapPicker from "./MapPicker";
 
 interface CreateAddressModalProps {
   visible: boolean;
@@ -43,9 +44,37 @@ const CreateAddressModal: React.FC<CreateAddressModalProps> = ({
     latitude: 0,
     longitude: 0,
   });
+  const [mapPickerVisible, setMapPickerVisible] = useState(false);
+
+  const currentLocation = useMemo(() => {
+    if (form.latitude && form.longitude) {
+      return {
+        latitude: form.latitude,
+        longitude: form.longitude,
+      };
+    }
+    return undefined;
+  }, [form.latitude, form.longitude]);
 
   const handleChange = (key: string, value: string | number) => {
     setForm((prev) => ({ ...prev, [key]: value }));
+  };
+
+  const handleLocationSelected = (location: {
+    latitude: number;
+    longitude: number;
+    province: string;
+    district: string;
+    ward: string;
+  }) => {
+    setForm((prev) => ({
+      ...prev,
+      latitude: location.latitude,
+      longitude: location.longitude,
+      province: location.province || prev.province,
+      district: location.district || prev.district,
+      ward: location.ward || prev.ward,
+    }));
   };
 
   const validateForm = () => {
@@ -182,6 +211,35 @@ const CreateAddressModal: React.FC<CreateAddressModalProps> = ({
             {/* Coordinates Input */}
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>Tọa độ</Text>
+              <TouchableOpacity
+                style={styles.mapPreview}
+                onPress={() => setMapPickerVisible(true)}
+              >
+                <View style={styles.mapPreviewHeader}>
+                  <Icon name="map" size={20} color={theme.colors.primary} />
+                  <Text style={styles.mapPreviewTitle}>
+                    Chọn trên Google Maps
+                  </Text>
+                </View>
+                <Text style={styles.mapPreviewDescription}>
+                  Nhấn để mở bản đồ và chọn tọa độ. Sau khi xác nhận, vĩ độ và
+                  kinh độ sẽ tự động được điền.
+                </Text>
+                <View style={styles.coordinatePreviewRow}>
+                  <View style={styles.coordinateChip}>
+                    <Text style={styles.coordinateChipLabel}>Lat</Text>
+                    <Text style={styles.coordinateChipValue}>
+                      {form.latitude || "--"}
+                    </Text>
+                  </View>
+                  <View style={styles.coordinateChip}>
+                    <Text style={styles.coordinateChipLabel}>Lng</Text>
+                    <Text style={styles.coordinateChipValue}>
+                      {form.longitude || "--"}
+                    </Text>
+                  </View>
+                </View>
+              </TouchableOpacity>
               <View style={styles.coordinatesRow}>
                 <View style={styles.coordinateInput}>
                   <Text style={styles.label}>Vĩ độ (Latitude) *</Text>
@@ -284,6 +342,12 @@ const CreateAddressModal: React.FC<CreateAddressModalProps> = ({
             </TouchableOpacity>
           </ScrollView>
         </View>
+        <MapPicker
+          visible={mapPickerVisible}
+          onClose={() => setMapPickerVisible(false)}
+          initialLocation={currentLocation}
+          onSelectLocation={handleLocationSelected}
+        />
       </View>
     </Modal>
   );
@@ -352,6 +416,54 @@ const styles = StyleSheet.create({
   },
   coordinateInput: {
     flex: 1,
+  },
+  mapPreview: {
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    borderRadius: theme.roundness,
+    padding: theme.spacing.md,
+    backgroundColor: theme.colors.background,
+    marginBottom: theme.spacing.md,
+  },
+  mapPreviewHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing.sm,
+    marginBottom: theme.spacing.xs,
+  },
+  mapPreviewTitle: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: theme.colors.text,
+  },
+  mapPreviewDescription: {
+    fontSize: 13,
+    color: theme.colors.mediumGray,
+    marginBottom: theme.spacing.sm,
+    lineHeight: 18,
+  },
+  coordinatePreviewRow: {
+    flexDirection: "row",
+    gap: theme.spacing.sm,
+  },
+  coordinateChip: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    borderRadius: theme.roundness,
+    paddingVertical: theme.spacing.sm,
+    paddingHorizontal: theme.spacing.md,
+    backgroundColor: theme.colors.surface,
+  },
+  coordinateChipLabel: {
+    fontSize: 12,
+    color: theme.colors.mediumGray,
+    marginBottom: theme.spacing.xs / 2,
+  },
+  coordinateChipValue: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: theme.colors.text,
   },
   submitButton: {
     backgroundColor: theme.colors.primary,
