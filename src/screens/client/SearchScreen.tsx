@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   View,
   Text,
@@ -7,101 +7,442 @@ import {
   FlatList,
   TouchableOpacity,
   ScrollView,
+  ActivityIndicator,
+  Alert,
 } from "react-native";
 import Icon from "react-native-vector-icons/MaterialIcons";
 import { theme } from "../../theme/theme";
 import RestaurantCard from "../../components/RestaurantCard";
 import FoodCard from "../../components/FoodCard";
-import { useNavigation } from "@react-navigation/native";
+import FilterModal from "../../components/FilterModal";
+import { useNavigation, useRoute } from "@react-navigation/native";
+import { api } from "../../services/api";
+import { calculateDistance, formatDistance } from "../../utils/helpers";
+import { useAuth } from "../../context/AuthContext";
+import { useCart } from "../../context/CartContext";
 
-// Mock data
-const mockSearchResults = [
-  {
-    id: "1",
-    type: "restaurant",
-    name: "Pizza Hut",
-    rating: 4.5,
-    deliveryTime: "25-35 phút",
-    deliveryFee: 15000,
-    image: "https://via.placeholder.com/300x200",
-    categories: ["Pizza", "Fast Food"],
-    distance: "0.8 km",
-  },
-  {
-    id: "2",
-    type: "food",
-    name: "Pizza Margherita",
-    price: 250000,
-    image: "https://via.placeholder.com/200x150",
-    restaurant: "Pizza Hut",
-    rating: 4.5,
-  },
-  {
-    id: "3",
-    type: "restaurant",
-    name: "KFC",
-    rating: 4.3,
-    deliveryTime: "20-30 phút",
-    deliveryFee: 12000,
-    image: "https://via.placeholder.com/300x200",
-    categories: ["Fast Food", "Chicken"],
-    distance: "1.2 km",
-  },
-];
+type SearchType = "all" | "product" | "restaurant";
+
+interface SearchFilters {
+  query: string;
+  type: "product" | "restaurant" | null;
+  categoryIds: number[];
+}
 
 const SearchScreen = () => {
   const [searchQuery, setSearchQuery] = useState("");
-  const [searchResults, setSearchResults] = useState(mockSearchResults);
-  const [selectedFilter, setSelectedFilter] = useState("all");
-  const navigation = useNavigation<any>();
+  const [selectedFilter, setSelectedFilter] = useState<SearchType>("all");
+  const [showFilterModal, setShowFilterModal] = useState(false);
+  const [filters, setFilters] = useState<SearchFilters>({
+    query: "",
+    type: null,
+    categoryIds: [],
+  });
 
-  const filters = [
-    { key: "all", label: "Tất cả" },
-    { key: "restaurant", label: "Nhà hàng" },
-    { key: "food", label: "Món ăn" },
-  ];
+  // Products state
+  const [products, setProducts] = useState<any[]>([]);
+  const [productsPage, setProductsPage] = useState(1);
+  const [productsLoading, setProductsLoading] = useState(false);
+  const [productsHasMore, setProductsHasMore] = useState(true);
 
-  const handleSearch = (query: string) => {
-    setSearchQuery(query);
-    // In real app, call API here
-    // For now, filter mock data
-    const filtered = mockSearchResults.filter((item) =>
-      item.name.toLowerCase().includes(query.toLowerCase())
-    );
-    setSearchResults(filtered);
+  // Restaurants state
+  const [restaurants, setRestaurants] = useState<any[]>([]);
+  const [restaurantsPage, setRestaurantsPage] = useState(1);
+  const [restaurantsLoading, setRestaurantsLoading] = useState(false);
+  const [restaurantsHasMore, setRestaurantsHasMore] = useState(true);
+
+  const [userDefaultAddress, setUserDefaultAddress] = useState<{
+    latitude: number;
+    longitude: number;
+  } | null>(null);
+
+  const { user } = useAuth();
+  const { cartId, refreshCartCount } = useCart();
+  const navigation = useNavigation();
+  const route = useRoute();
+
+  // Load user default address
+  useEffect(() => {
+    const loadUserAddress = async () => {
+      if (!user?.id) return;
+
+      try {
+        const userAddresses = await api.getUserAddresses(user.id);
+        const defaultAddress = (userAddresses as any[]).find(
+          (ua: any) => ua.address?.isDefault
+        );
+        if (defaultAddress?.address) {
+          setUserDefaultAddress({
+            latitude: defaultAddress.address.latitude,
+            longitude: defaultAddress.address.longitude,
+          });
+        }
+      } catch (error) {
+        console.error("Error loading user address:", error);
+      }
+    };
+
+    loadUserAddress();
+  }, [user?.id]);
+
+  // Initialize from route params
+  useEffect(() => {
+    if (route.params) {
+      const params = route.params as any;
+      if (params.query) {
+        setSearchQuery(params.query);
+        setFilters((prev) => ({ ...prev, query: params.query }));
+      }
+      if (params.type) {
+        setSelectedFilter(params.type === "product" ? "product" : "restaurant");
+      }
+      if (params.showFilter) {
+        setShowFilterModal(true);
+      }
+      if (params.categoryIds) {
+        setFilters((prev) => ({
+          ...prev,
+          categoryIds: Array.isArray(params.categoryIds)
+            ? params.categoryIds
+            : [],
+        }));
+      }
+    }
+  }, [route.params]);
+
+  // Load products
+  const loadProducts = useCallback(
+    async (page: number, reset: boolean = false, overrideQuery?: string) => {
+      if (productsLoading) return;
+
+      try {
+        setProductsLoading(true);
+        const query = overrideQuery ?? searchQuery;
+        let allProducts: any[] = [];
+
+        if (query || filters.categoryIds.length > 0) {
+          allProducts = await api.searchProducts(query, filters.categoryIds);
+        } else {
+          allProducts = await api.getAllProducts(page, 5);
+        }
+
+        const limit = 5;
+        const startIndex = (page - 1) * limit;
+        const endIndex = startIndex + limit;
+        const productsData = allProducts.slice(startIndex, endIndex);
+
+        if (reset) {
+          setProducts(productsData);
+        } else {
+          setProducts((prev) => [...prev, ...productsData]);
+        }
+
+        setProductsHasMore(endIndex < allProducts.length);
+      } catch (error: any) {
+        console.error("Error loading products:", error);
+        Alert.alert("Lỗi", "Không thể tải danh sách món ăn.");
+      } finally {
+        setProductsLoading(false);
+      }
+    },
+    [filters.categoryIds, searchQuery, productsLoading]
+  );
+
+  // Load restaurants
+  const loadRestaurants = useCallback(
+    async (page: number, reset: boolean = false, overrideQuery?: string) => {
+      if (restaurantsLoading) return;
+
+      try {
+        setRestaurantsLoading(true);
+        const query = overrideQuery ?? searchQuery;
+        let allRestaurants: any[] = [];
+
+        if (query || filters.categoryIds.length > 0) {
+          allRestaurants = await api.searchRestaurants(
+            query,
+            filters.categoryIds
+          );
+        } else {
+          allRestaurants = await api.getAllRestaurants(page, 5);
+        }
+
+        if (userDefaultAddress) {
+          allRestaurants = allRestaurants.map((restaurant) => {
+            if (restaurant.address) {
+              const distance = calculateDistance(
+                userDefaultAddress.latitude,
+                userDefaultAddress.longitude,
+                restaurant.address.latitude,
+                restaurant.address.longitude
+              );
+              return { ...restaurant, distance };
+            }
+            return restaurant;
+          });
+        }
+
+        const limit = 5;
+        const startIndex = (page - 1) * limit;
+        const endIndex = startIndex + limit;
+        const restaurantsData = allRestaurants.slice(startIndex, endIndex);
+
+        if (reset) {
+          setRestaurants(restaurantsData);
+        } else {
+          setRestaurants((prev) => [...prev, ...restaurantsData]);
+        }
+
+        setRestaurantsHasMore(endIndex < allRestaurants.length);
+      } catch (error: any) {
+        console.error("Error loading restaurants:", error);
+        Alert.alert("Lỗi", "Không thể tải danh sách nhà hàng.");
+      } finally {
+        setRestaurantsLoading(false);
+      }
+    },
+    [filters.categoryIds, searchQuery, restaurantsLoading, userDefaultAddress]
+  );
+
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      const trimmed = searchQuery.trim();
+      setFilters((prev) =>
+        prev.query === trimmed ? prev : { ...prev, query: trimmed }
+      );
+    }, 300);
+    return () => clearTimeout(handler);
+  }, [searchQuery]);
+
+  // Load data when filters change
+  useEffect(() => {
+    setProductsPage(1);
+    setRestaurantsPage(1);
+    loadProducts(1, true, filters.query);
+    if (selectedFilter === "all" || selectedFilter === "restaurant") {
+      loadRestaurants(1, true, filters.query);
+    }
+  }, [filters, selectedFilter, loadProducts, loadRestaurants]);
+
+  const handleSearch = () => {
+    setSearchQuery((prev) => prev.trim());
   };
 
-  const renderItem = ({ item }: { item: any }) => {
-    if (item.type === "restaurant") {
-      return (
-        <RestaurantCard
-          restaurant={item}
-          onPress={() =>
-            navigation.navigate("RestaurantDetail", { restaurant: item })
-          }
-        />
-      );
-    } else {
-      return <FoodCard food={item} />;
+  const handleFilterConfirm = (newFilters: SearchFilters) => {
+    if (typeof newFilters.query === "string") {
+      setSearchQuery(newFilters.query);
+    }
+    if (newFilters.type) {
+      setSelectedFilter(newFilters.type);
+    }
+    setFilters((prev) => ({
+      ...prev,
+      query: newFilters.query ?? prev.query,
+      type: newFilters.type,
+      categoryIds: newFilters.categoryIds || [],
+    }));
+  };
+
+  const handleLoadMoreProducts = () => {
+    if (productsHasMore && !productsLoading) {
+      const nextPage = productsPage + 1;
+      setProductsPage(nextPage);
+      loadProducts(nextPage, false, filters.query);
     }
   };
 
-  const renderFilter = (filter: any) => (
+  const handleLoadMoreRestaurants = () => {
+    if (restaurantsHasMore && !restaurantsLoading) {
+      const nextPage = restaurantsPage + 1;
+      setRestaurantsPage(nextPage);
+      loadRestaurants(nextPage, false, filters.query);
+    }
+  };
+
+  const handleAddToCart = async (product: any) => {
+    if (!user?.id) {
+      Alert.alert("Lỗi", "Vui lòng đăng nhập để thêm vào giỏ hàng");
+      return;
+    }
+
+    try {
+      // Lấy hoặc tạo cart
+      let currentCartId = cartId;
+      if (!currentCartId) {
+        const cart = await api.getOrCreateUserCart(user.id);
+        currentCartId = (cart as any).id;
+      }
+
+      if (!currentCartId) {
+        Alert.alert("Lỗi", "Không thể tạo giỏ hàng. Vui lòng thử lại.");
+        return;
+      }
+
+      // Lấy restaurantId của product đang thêm
+      const productRestaurantId =
+        product.restaurantID || product.restaurant?.id;
+
+      if (!productRestaurantId) {
+        Alert.alert("Lỗi", "Không thể xác định nhà hàng của sản phẩm.");
+        return;
+      }
+
+      // Kiểm tra các cart items hiện có trong giỏ hàng
+      const existingCartItems = await api.getCartItemsByCart(currentCartId);
+      const activeCartItems = (existingCartItems as any[]).filter(
+        (item: any) => item.isActive
+      );
+
+      // Nếu giỏ hàng đã có items, kiểm tra restaurantId
+      if (activeCartItems.length > 0) {
+        const firstItemRestaurantId =
+          activeCartItems[0].product?.restaurantID ||
+          activeCartItems[0].product?.restaurant?.id;
+
+        if (firstItemRestaurantId !== productRestaurantId) {
+          Alert.alert(
+            "Không hợp lệ",
+            "Giỏ hàng đang chứa món ăn từ nhà hàng khác. Vui lòng xóa các món hiện có hoặc đặt hàng riêng."
+          );
+          return;
+        }
+      }
+
+      // Kiểm tra xem product đã có trong cart chưa (bao gồm cả isActive = false)
+      let existingItem: any = null;
+      try {
+        existingItem = await api.getCartItemByCartAndProduct(
+          currentCartId,
+          product.id
+        );
+      } catch (error) {
+        // Không tìm thấy, sẽ tạo mới
+      }
+
+      if (existingItem) {
+        if (existingItem.isActive) {
+          // Nếu đã active, tăng quantity lên 1
+          const newQuantity = existingItem.quantity + 1;
+          const newUnitPrice = product.price * newQuantity;
+          await api.updateCartItem(existingItem.id, {
+            quantity: newQuantity,
+            unitPrice: newUnitPrice,
+          });
+        } else {
+          // Nếu isActive = false, set lại isActive = true và quantity = 1
+          await api.updateCartItem(existingItem.id, {
+            quantity: 1,
+            unitPrice: product.price,
+            isActive: true,
+          });
+        }
+      } else {
+        // Tạo cart item mới
+        await api.createCartItem({
+          cartId: currentCartId,
+          productId: product.id,
+          quantity: 1,
+          unitPrice: product.price,
+        });
+      }
+
+      await refreshCartCount();
+      Alert.alert("Thành công", "Đã thêm vào giỏ hàng");
+    } catch (error: any) {
+      console.error("Error adding to cart:", error);
+      Alert.alert("Lỗi", "Không thể thêm vào giỏ hàng. Vui lòng thử lại.");
+    }
+  };
+
+  const renderProduct = ({ item }: { item: any }) => {
+    const foodData = {
+      id: item.id.toString(),
+      name: item.name,
+      price: item.price,
+      image: item.imageUrl || "https://via.placeholder.com/200x150",
+      restaurant: item.restaurant?.name || "Nhà hàng",
+      rating:
+        typeof item.restaurant?.rating === "number"
+          ? item.restaurant.rating
+          : 0,
+    };
+
+    const handlePress = () => {
+      const restaurantId = item.restaurantID || item.restaurant?.id;
+      if (!restaurantId) {
+        Alert.alert("Thông báo", "Không tìm thấy nhà hàng của món ăn này.");
+        return;
+      }
+      navigation.navigate(
+        "RestaurantDetail" as never,
+        {
+          restaurantId,
+          focusProductId: item.id,
+        } as never
+      );
+    };
+
+    return (
+      <FoodCard
+        food={foodData}
+        onPress={handlePress}
+        onAddToCart={() => handleAddToCart(item)}
+      />
+    );
+  };
+
+  const renderRestaurant = ({ item }: { item: any }) => {
+    const ratingValue =
+      typeof item.rating === "number" && !Number.isNaN(item.rating)
+        ? item.rating
+        : 0;
+    const restaurantData = {
+      id: item.id.toString(),
+      name: item.name,
+      rating: ratingValue,
+      deliveryTime: "25-35 phút",
+      deliveryFee: 15000,
+      image: item.imageUrl || "https://via.placeholder.com/300x200",
+      categories:
+        item.categories?.map(
+          (c: any) => c.name || c.category?.name || "Nhà hàng"
+        ) || [],
+      distance: item.distance
+        ? formatDistance(item.distance)
+        : "Không xác định",
+    };
+
+    return (
+      <RestaurantCard
+        restaurant={restaurantData}
+        onPress={() =>
+          navigation.navigate(
+            "RestaurantDetail" as never,
+            {
+              restaurantId: item.id,
+            } as never
+          )
+        }
+      />
+    );
+  };
+
+  const renderFilterChip = (key: SearchType, label: string) => (
     <TouchableOpacity
-      key={filter.key}
+      key={key}
       style={[
         styles.filterChip,
-        selectedFilter === filter.key && styles.selectedFilterChip,
+        selectedFilter === key && styles.selectedFilterChip,
       ]}
-      onPress={() => setSelectedFilter(filter.key)}
+      onPress={() => setSelectedFilter(key)}
     >
       <Text
         style={[
           styles.filterText,
-          selectedFilter === filter.key && styles.selectedFilterText,
+          selectedFilter === key && styles.selectedFilterText,
         ]}
       >
-        {filter.label}
+        {label}
       </Text>
     </TouchableOpacity>
   );
@@ -116,11 +457,12 @@ const SearchScreen = () => {
             style={styles.searchInput}
             placeholder="Tìm món ăn, nhà hàng..."
             value={searchQuery}
-            onChangeText={handleSearch}
+            onChangeText={setSearchQuery}
+            onSubmitEditing={handleSearch}
             placeholderTextColor={theme.colors.placeholder}
           />
           {searchQuery.length > 0 && (
-            <TouchableOpacity onPress={() => handleSearch("")}>
+            <TouchableOpacity onPress={() => setSearchQuery("")}>
               <Icon name="clear" size={24} color={theme.colors.mediumGray} />
             </TouchableOpacity>
           )}
@@ -134,26 +476,98 @@ const SearchScreen = () => {
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.filtersScroll}
         >
-          {filters.map(renderFilter)}
+          {renderFilterChip("all", "Tất cả")}
+          {renderFilterChip("product", "Món ăn")}
+          {renderFilterChip("restaurant", "Nhà hàng")}
+          <TouchableOpacity
+            style={styles.filterIconButton}
+            onPress={() => setShowFilterModal(true)}
+          >
+            <Icon name="tune" size={24} color={theme.colors.primary} />
+          </TouchableOpacity>
         </ScrollView>
       </View>
 
       {/* Results */}
-      <FlatList
-        data={searchResults}
-        renderItem={renderItem}
-        keyExtractor={(item) => item.id}
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.resultsContainer}
-        ListEmptyComponent={
-          <View style={styles.emptyContainer}>
-            <Icon name="search-off" size={64} color={theme.colors.mediumGray} />
-            <Text style={styles.emptyText}>Không tìm thấy kết quả</Text>
-            <Text style={styles.emptySubtext}>
-              Thử tìm kiếm với từ khóa khác
-            </Text>
+      <ScrollView
+        style={styles.resultsContainer}
+        contentContainerStyle={styles.scrollContent}
+      >
+        {/* Products Section */}
+        {(selectedFilter === "all" || selectedFilter === "product") && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Món ăn</Text>
+            <FlatList
+              data={products}
+              renderItem={renderProduct}
+              keyExtractor={(item) => `product-${item.id}`}
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.productList}
+              onEndReached={handleLoadMoreProducts}
+              onEndReachedThreshold={0.5}
+              ListFooterComponent={
+                productsLoading ? (
+                  <View style={styles.loadingContainer}>
+                    <ActivityIndicator
+                      size="small"
+                      color={theme.colors.primary}
+                    />
+                  </View>
+                ) : null
+              }
+              ListEmptyComponent={
+                !productsLoading ? (
+                  <View style={styles.emptyContainer}>
+                    <Text style={styles.emptyText}>Không tìm thấy món ăn</Text>
+                  </View>
+                ) : null
+              }
+            />
           </View>
-        }
+        )}
+
+        {/* Restaurants Section */}
+        {(selectedFilter === "all" || selectedFilter === "restaurant") && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Nhà hàng</Text>
+            <FlatList
+              data={restaurants}
+              renderItem={renderRestaurant}
+              keyExtractor={(item) => `restaurant-${item.id}`}
+              showsVerticalScrollIndicator={false}
+              scrollEnabled={false}
+              onEndReached={handleLoadMoreRestaurants}
+              onEndReachedThreshold={0.5}
+              ListFooterComponent={
+                restaurantsLoading ? (
+                  <View style={styles.loadingContainer}>
+                    <ActivityIndicator
+                      size="small"
+                      color={theme.colors.primary}
+                    />
+                  </View>
+                ) : null
+              }
+              ListEmptyComponent={
+                !restaurantsLoading ? (
+                  <View style={styles.emptyContainer}>
+                    <Text style={styles.emptyText}>
+                      Không tìm thấy nhà hàng
+                    </Text>
+                  </View>
+                ) : null
+              }
+            />
+          </View>
+        )}
+      </ScrollView>
+
+      {/* Filter Modal */}
+      <FilterModal
+        visible={showFilterModal}
+        onClose={() => setShowFilterModal(false)}
+        onConfirm={handleFilterConfirm}
       />
     </View>
   );
@@ -215,25 +629,42 @@ const styles = StyleSheet.create({
   selectedFilterText: {
     color: theme.colors.surface,
   },
+  filterIconButton: {
+    padding: theme.spacing.sm,
+    backgroundColor: theme.colors.lightOrange,
+    borderRadius: theme.roundness / 2,
+    marginLeft: theme.spacing.sm,
+  },
   resultsContainer: {
-    paddingVertical: theme.spacing.md,
-  },
-  emptyContainer: {
     flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    paddingVertical: theme.spacing.xxl,
   },
-  emptyText: {
+  scrollContent: {
+    paddingBottom: theme.navbarHeight + theme.spacing.md,
+  },
+  section: {
+    marginBottom: theme.spacing.xl,
+  },
+  sectionTitle: {
     fontSize: 18,
     fontWeight: "bold",
-    color: theme.colors.mediumGray,
-    marginTop: theme.spacing.md,
+    color: theme.colors.text,
+    paddingHorizontal: theme.spacing.lg,
+    marginBottom: theme.spacing.md,
   },
-  emptySubtext: {
+  productList: {
+    paddingHorizontal: theme.spacing.lg,
+  },
+  loadingContainer: {
+    padding: theme.spacing.md,
+    alignItems: "center",
+  },
+  emptyContainer: {
+    padding: theme.spacing.xl,
+    alignItems: "center",
+  },
+  emptyText: {
     fontSize: 14,
     color: theme.colors.mediumGray,
-    marginTop: theme.spacing.sm,
   },
 });
 
