@@ -17,6 +17,7 @@ import { formatDateTime, formatPrice } from "../../utils/helpers";
 import FeedbackModal, { OrderFeedback } from "../../components/FeedbackModal";
 import OrderJourneyModal from "../../components/OrderJourneyModal";
 import EditOrderModal from "../../components/EditOrderModal";
+import AddPaymentMethodModal from "../../components/AddPaymentMethodModal";
 import { useAuth } from "../../context/AuthContext";
 
 interface OrderDetail {
@@ -85,6 +86,7 @@ const OrderDetailScreen = () => {
   const [feedbackModalVisible, setFeedbackModalVisible] = useState(false);
   const [journeyModalVisible, setJourneyModalVisible] = useState(false);
   const [editOrderModalVisible, setEditOrderModalVisible] = useState(false);
+  const [addPaymentModalVisible, setAddPaymentModalVisible] = useState(false);
 
   const loadOrder = useCallback(async () => {
     try {
@@ -479,33 +481,51 @@ const OrderDetailScreen = () => {
             <Text style={styles.infoValue}>{getPaymentMethod()}</Text>
           </View>
           {paymentStatusText && (
-            <View style={[styles.infoCard, styles.paymentStatusCard]}>
-              <View style={styles.paymentStatusRow}>
-                <Icon
-                  name={
-                    paymentStatusText === "Đã thanh toán"
-                      ? "check-circle"
-                      : "payment"
-                  }
-                  size={18}
-                  color={
-                    paymentStatusText === "Đã thanh toán"
-                      ? theme.colors.success
-                      : theme.colors.warning
-                  }
-                />
-                <Text
-                  style={[
-                    styles.paymentStatusText,
-                    paymentStatusText === "Đã thanh toán"
-                      ? { color: theme.colors.success }
-                      : { color: theme.colors.warning },
-                  ]}
-                >
-                  Trạng thái thanh toán: {paymentStatusText}
-                </Text>
+            <>
+              <View style={[styles.infoCard, styles.paymentStatusCard]}>
+                <View style={styles.paymentStatusRow}>
+                  <Icon
+                    name={
+                      paymentStatusText === "Đã thanh toán"
+                        ? "check-circle"
+                        : "payment"
+                    }
+                    size={18}
+                    color={
+                      paymentStatusText === "Đã thanh toán"
+                        ? theme.colors.success
+                        : theme.colors.warning
+                    }
+                  />
+                  <Text
+                    style={[
+                      styles.paymentStatusText,
+                      paymentStatusText === "Đã thanh toán"
+                        ? { color: theme.colors.success }
+                        : { color: theme.colors.warning },
+                    ]}
+                  >
+                    Trạng thái thanh toán: {paymentStatusText}
+                  </Text>
+                </View>
               </View>
-            </View>
+              {order.status === 4 &&
+                paymentStatusText === "Chưa thanh toán" && (
+                  <TouchableOpacity
+                    style={styles.addPaymentButton}
+                    onPress={() => setAddPaymentModalVisible(true)}
+                  >
+                    <Icon
+                      name="add-circle"
+                      size={18}
+                      color={theme.colors.primary}
+                    />
+                    <Text style={styles.addPaymentButtonText}>
+                      Thêm phương thức thanh toán
+                    </Text>
+                  </TouchableOpacity>
+                )}
+            </>
           )}
         </View>
 
@@ -558,6 +578,14 @@ const OrderDetailScreen = () => {
               userId={user.id}
             />
           )}
+          <AddPaymentMethodModal
+            visible={addPaymentModalVisible}
+            onClose={() => setAddPaymentModalVisible(false)}
+            onSuccess={() => {
+              loadOrder();
+            }}
+            orderId={order.id}
+          />
         </>
       ) : null}
     </View>
@@ -915,6 +943,24 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "600",
     color: theme.colors.error,
+    marginLeft: theme.spacing.xs,
+  },
+  addPaymentButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: theme.colors.background,
+    borderRadius: theme.roundness,
+    paddingVertical: theme.spacing.sm,
+    paddingHorizontal: theme.spacing.md,
+    marginTop: theme.spacing.sm,
+    borderWidth: 1,
+    borderColor: theme.colors.primary,
+  },
+  addPaymentButtonText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: theme.colors.primary,
     marginLeft: theme.spacing.xs,
   },
 });
