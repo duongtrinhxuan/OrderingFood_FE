@@ -20,6 +20,7 @@ import NotificationsModal, {
   NotificationRecord,
 } from "../../components/NotificationsModal";
 import { useFocusEffect } from "@react-navigation/native";
+import DiscountListModal from "../../components/DiscountListModal";
 
 const ProfileScreen = () => {
   const { user, setUser, logout } = useAuth();
@@ -32,6 +33,7 @@ const ProfileScreen = () => {
   const [unreadCount, setUnreadCount] = useState(0);
   const [totalOrders, setTotalOrders] = useState(0);
   const [totalReviews, setTotalReviews] = useState(0);
+  const [discountModalVisible, setDiscountModalVisible] = useState(false);
   const handleLogout = () => {
     Alert.alert("Đăng xuất", "Bạn có chắc chắn muốn đăng xuất?", [
       { text: "Hủy", style: "cancel" },
@@ -146,6 +148,10 @@ const ProfileScreen = () => {
     }, [fetchNotifications, fetchOrderStats])
   );
 
+  const handleOpenDiscounts = () => {
+    setDiscountModalVisible(true);
+  };
+
   const menuItems = [
     {
       id: "1",
@@ -163,7 +169,7 @@ const ProfileScreen = () => {
       id: "4",
       title: "Mã giảm giá",
       icon: "local-offer",
-      onPress: () => {},
+      onPress: handleOpenDiscounts,
     },
     {
       id: "6",
@@ -184,12 +190,6 @@ const ProfileScreen = () => {
       icon: "help",
       onPress: () => {},
     },
-    {
-      id: "9",
-      title: "Trợ giúp & Hỗ trợ",
-      icon: "help",
-      onPress: () => {},
-    },
   ];
 
   const renderMenuItem = (item: any) => (
@@ -201,7 +201,7 @@ const ProfileScreen = () => {
       <View style={styles.menuItemLeft}>
         <View style={styles.menuIconContainer}>
           <Icon name={item.icon} size={24} color={theme.colors.primary} />
-          {item.badgeCount > 0 && (
+          {item.badgeCount && item.badgeCount > 0 && (
             <View style={styles.notificationBadge}>
               <Text style={styles.notificationBadgeText}>
                 {item.badgeCount > 99 ? "99+" : item.badgeCount}
@@ -298,6 +298,10 @@ const ProfileScreen = () => {
         loading={loadingNotifications}
         onRefresh={fetchNotifications}
         onNotificationPress={handleNotificationPress}
+      />
+      <DiscountListModal
+        visible={discountModalVisible}
+        onClose={() => setDiscountModalVisible(false)}
       />
     </ScrollView>
   );
