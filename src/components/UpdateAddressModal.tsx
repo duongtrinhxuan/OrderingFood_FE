@@ -79,7 +79,18 @@ const UpdateAddressModal: React.FC<UpdateAddressModalProps> = ({
         isDefault: address.isDefault || false,
       });
     }
-  }, [visible, address]);
+  }, [
+    visible,
+    address.id,
+    address.label,
+    address.province,
+    address.district,
+    address.ward,
+    address.street,
+    address.latitude,
+    address.longitude,
+    address.isDefault,
+  ]);
 
   const handleChange = (key: string, value: string | number) => {
     setForm((prev) => ({ ...prev, [key]: value }));
