@@ -116,7 +116,8 @@ const EditOrderModal: React.FC<EditOrderModalProps> = ({
         setLoadingData(false);
       });
     }
-  }, [visible, loadAddresses, loadDiscounts]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visible]);
 
   useEffect(() => {
     if (visible && order) {
@@ -126,7 +127,15 @@ const EditOrderModal: React.FC<EditOrderModalProps> = ({
       setSelectedPaymentMethod(order.payments?.[0]?.paymentMethod || "COD");
       setOrderDetails(order.orderDetails || []);
     }
-  }, [visible, order]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    visible,
+    order?.id,
+    order?.note,
+    order?.addressId,
+    order?.discountId,
+    order?.payments?.[0]?.paymentMethod,
+  ]);
 
   const handleUpdateQuantity = (detailId: number, newQuantity: number) => {
     if (newQuantity < 1) return;

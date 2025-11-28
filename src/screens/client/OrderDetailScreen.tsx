@@ -102,7 +102,8 @@ const OrderDetailScreen = () => {
 
   useEffect(() => {
     loadOrder();
-  }, [loadOrder]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [orderId]);
 
   const existingFeedback = order?.feedbacks?.[0] || null;
 
@@ -127,6 +128,16 @@ const OrderDetailScreen = () => {
     if (!order?.payments || order.payments.length === 0) {
       return "Không có thông tin";
     }
+    // Nếu status = 4, hiển thị tất cả payments
+    if (order.status === 4) {
+      return (
+        order.payments
+          .map((p) => p?.paymentMethod || "")
+          .filter((method) => method !== "")
+          .join(", ") || "Không có thông tin"
+      );
+    }
+    // Với các status khác, chỉ hiển thị payment mới nhất
     const latestPayment = order.payments.reduce((latest, current) => {
       if (!current) return latest;
       if (!latest) return current;
@@ -477,9 +488,30 @@ const OrderDetailScreen = () => {
         {/* Payment Method */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Phương thức thanh toán</Text>
-          <View style={styles.infoCard}>
-            <Text style={styles.infoValue}>{getPaymentMethod()}</Text>
-          </View>
+          {order.status === 4 && order.payments && order.payments.length > 0 ? (
+            // Hiển thị tất cả payments cho status = 4
+            <>
+              {order.payments.map((payment, index) => (
+                <View key={payment?.id || index} style={styles.infoCard}>
+                  <View style={styles.paymentMethodRow}>
+                    <Icon
+                      name="payment"
+                      size={18}
+                      color={theme.colors.primary}
+                    />
+                    <Text style={styles.infoValue}>
+                      {payment?.paymentMethod || "Không xác định"}
+                    </Text>
+                  </View>
+                </View>
+              ))}
+            </>
+          ) : (
+            // Hiển thị payment method cho các status khác
+            <View style={styles.infoCard}>
+              <Text style={styles.infoValue}>{getPaymentMethod()}</Text>
+            </View>
+          )}
           {paymentStatusText && (
             <>
               <View style={[styles.infoCard, styles.paymentStatusCard]}>
@@ -962,6 +994,10 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: theme.colors.primary,
     marginLeft: theme.spacing.xs,
+  },
+  paymentMethodRow: {
+    flexDirection: "row",
+    alignItems: "center",
   },
 });
 

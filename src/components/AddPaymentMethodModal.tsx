@@ -45,9 +45,10 @@ const AddPaymentMethodModal: React.FC<AddPaymentMethodModalProps> = ({
     if (visible && orderId) {
       loadExistingPayments();
     }
-  }, [visible, orderId]);
+  }, [visible, orderId, loadExistingPayments]);
 
-  const loadExistingPayments = async () => {
+  const loadExistingPayments = React.useCallback(async () => {
+    if (!orderId) return;
     try {
       setLoadingPayments(true);
       const payments = await api.getPaymentsByOrder(orderId);
@@ -58,7 +59,7 @@ const AddPaymentMethodModal: React.FC<AddPaymentMethodModalProps> = ({
     } finally {
       setLoadingPayments(false);
     }
-  };
+  }, [orderId]);
 
   // Lọc ra các payment method đã có
   const existingMethods = existingPayments.map((p) => p.paymentMethod);
