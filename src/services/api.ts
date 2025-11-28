@@ -362,6 +362,18 @@ export const api = {
     payload: {
       status?: number;
       note?: string;
+      addressId?: number;
+      discountId?: number | null;
+      orderDetails?: Array<{
+        id?: number;
+        productId: number;
+        quantity: number;
+        note?: string;
+      }>;
+      payment?: {
+        paymentMethod: string;
+        status?: number;
+      };
     }
   ) {
     return request(`/orders/${orderId}`, "PATCH", payload);
