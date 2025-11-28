@@ -10,6 +10,7 @@ import ClientNavigator from "./src/navigation/ClientNavigator";
 import SellerNavigator from "./src/navigation/SellerNavigator";
 import { theme } from "./src/theme/theme";
 import { AuthContext, AuthUser, UserRole } from "./src/context/AuthContext";
+import { CartProvider } from "./src/context/CartContext";
 
 const Stack = createStackNavigator();
 
@@ -35,28 +36,30 @@ const App = () => {
               logout: handleLogout,
             }}
           >
-            <NavigationContainer>
-              <StatusBar
-                barStyle="dark-content"
-                backgroundColor={theme.colors.primary}
-              />
-              <Stack.Navigator screenOptions={{ headerShown: false }}>
-                {!isAuthenticated ? (
-                  <Stack.Screen name="Auth">
-                    {(props) => (
-                      <AuthScreen
-                        {...props}
-                        onLogin={(authUser: AuthUser) => setUser(authUser)}
-                      />
-                    )}
-                  </Stack.Screen>
-                ) : userRole === "client" ? (
-                  <Stack.Screen name="Main" component={ClientNavigator} />
-                ) : (
-                  <Stack.Screen name="Seller" component={SellerNavigator} />
-                )}
-              </Stack.Navigator>
-            </NavigationContainer>
+            <CartProvider>
+              <NavigationContainer>
+                <StatusBar
+                  barStyle="dark-content"
+                  backgroundColor={theme.colors.primary}
+                />
+                <Stack.Navigator screenOptions={{ headerShown: false }}>
+                  {!isAuthenticated ? (
+                    <Stack.Screen name="Auth">
+                      {(props) => (
+                        <AuthScreen
+                          {...props}
+                          onLogin={(authUser: AuthUser) => setUser(authUser)}
+                        />
+                      )}
+                    </Stack.Screen>
+                  ) : userRole === "client" ? (
+                    <Stack.Screen name="Main" component={ClientNavigator} />
+                  ) : (
+                    <Stack.Screen name="Seller" component={SellerNavigator} />
+                  )}
+                </Stack.Navigator>
+              </NavigationContainer>
+            </CartProvider>
           </AuthContext.Provider>
         </SafeAreaView>
       </PaperProvider>
