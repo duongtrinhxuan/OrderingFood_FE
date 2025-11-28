@@ -17,6 +17,7 @@ import { useAuth } from "../../context/AuthContext";
 import { api } from "../../services/api";
 import { formatDateTime, formatPrice } from "../../utils/helpers";
 import { useRoute } from "@react-navigation/native";
+import OrderJourneyModal from "../../components/OrderJourneyModal";
 
 interface OrderDetail {
   id: number;
@@ -129,6 +130,7 @@ const OrdersManagementScreen: React.FC<
   const [selectedPaymentId, setSelectedPaymentId] = useState<number | null>(
     null
   );
+  const [journeyModalVisible, setJourneyModalVisible] = useState(false);
 
   useEffect(() => {
     setCurrentRestaurantId(restaurantId ?? routeRestaurantId ?? null);
@@ -666,6 +668,26 @@ const OrdersManagementScreen: React.FC<
 
             {renderFeedbackCard(selectedOrder)}
 
+            {(selectedOrder.status === 2 ||
+              selectedOrder.status === 3 ||
+              selectedOrder.status === 4 ||
+              selectedOrder.status === 5) && (
+              <TouchableOpacity
+                style={styles.detailSecondaryButton}
+                onPress={() => setJourneyModalVisible(true)}
+              >
+                <Icon
+                  name="timeline"
+                  size={18}
+                  color={theme.colors.primary}
+                  style={{ marginRight: theme.spacing.xs }}
+                />
+                <Text style={styles.detailSecondaryButtonText}>
+                  Theo dõi hành trình đơn
+                </Text>
+              </TouchableOpacity>
+            )}
+
             <TouchableOpacity
               style={styles.detailPrimaryButton}
               onPress={handleUpdateStatusFromDetail}
@@ -790,6 +812,15 @@ const OrdersManagementScreen: React.FC<
           </View>
         </View>
       </Modal>
+
+      {selectedOrder && (
+        <OrderJourneyModal
+          visible={journeyModalVisible}
+          onClose={() => setJourneyModalVisible(false)}
+          orderId={selectedOrder.id}
+          canEdit={true}
+        />
+      )}
 
       <Modal
         visible={statusModalVisible}
@@ -1232,6 +1263,21 @@ const styles = StyleSheet.create({
   },
   detailPrimaryButtonText: {
     color: theme.colors.surface,
+    fontWeight: "600",
+  },
+  detailSecondaryButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: theme.colors.background,
+    borderRadius: theme.roundness,
+    paddingVertical: theme.spacing.md,
+    marginBottom: theme.spacing.md,
+    borderWidth: 1,
+    borderColor: theme.colors.primary,
+  },
+  detailSecondaryButtonText: {
+    color: theme.colors.primary,
     fontWeight: "600",
   },
   detailFeedbackCard: {
