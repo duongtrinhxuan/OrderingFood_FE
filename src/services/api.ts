@@ -464,11 +464,18 @@ export const api = {
     }
     return request(`/products/search?${params.toString()}`, "GET");
   },
-  searchRestaurants(query?: string, categoryIds?: number[]) {
+  searchRestaurants(
+    query?: string,
+    productCategoryIds?: number[],
+    restaurantCategoryIds?: number[]
+  ) {
     const params = new URLSearchParams();
     if (query) params.append("q", query);
-    if (categoryIds && categoryIds.length > 0) {
-      params.append("categoryIds", categoryIds.join(","));
+    if (productCategoryIds && productCategoryIds.length > 0) {
+      params.append("productCategoryIds", productCategoryIds.join(","));
+    }
+    if (restaurantCategoryIds && restaurantCategoryIds.length > 0) {
+      params.append("restaurantCategoryIds", restaurantCategoryIds.join(","));
     }
     return request(`/restaurants/search?${params.toString()}`, "GET");
   },

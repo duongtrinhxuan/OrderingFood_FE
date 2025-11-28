@@ -46,12 +46,16 @@ const SearchScreen = () => {
 
   // Products state
   const [products, setProducts] = useState<any[]>([]);
+  const [allProducts, setAllProducts] = useState<any[]>([]); // Lưu tất cả products để filter
+  const [filteredProducts, setFilteredProducts] = useState<any[]>([]); // Lưu products đã filter
   const [productsPage, setProductsPage] = useState(1);
+  const [productsDisplayLimit, setProductsDisplayLimit] = useState(5); // Số lượng products đang hiển thị
   const [productsLoading, setProductsLoading] = useState(false);
   const [productsHasMore, setProductsHasMore] = useState(true);
 
   // Restaurants state
   const [restaurants, setRestaurants] = useState<any[]>([]);
+  const [allRestaurants, setAllRestaurants] = useState<any[]>([]); // Lưu tất cả restaurants để filter
   const [restaurantsPage, setRestaurantsPage] = useState(1);
   const [restaurantsLoading, setRestaurantsLoading] = useState(false);
   const [restaurantsHasMore, setRestaurantsHasMore] = useState(true);
@@ -162,9 +166,23 @@ const SearchScreen = () => {
         const productsData = allProducts.slice(startIndex, endIndex);
 
         if (reset) {
+          // Loại bỏ duplicate khi reset
+          const uniqueProducts = Array.from(
+            new Map(allProducts.map((p) => [p.id, p])).values()
+          );
+          setAllProducts(uniqueProducts);
           setProducts(productsData);
         } else {
-          setProducts((prev) => [...prev, ...productsData]);
+          setAllProducts((prev) => {
+            // Loại bỏ duplicate khi thêm mới
+            const combined = [...prev, ...productsData];
+            return Array.from(new Map(combined.map((p) => [p.id, p])).values());
+          });
+          setProducts((prev) => {
+            // Loại bỏ duplicate trong products hiển thị
+            const combined = [...prev, ...productsData];
+            return Array.from(new Map(combined.map((p) => [p.id, p])).values());
+          });
         }
 
         setProductsHasMore(endIndex < allProducts.length);
@@ -195,10 +213,21 @@ const SearchScreen = () => {
         let allRestaurants: any[] = [];
 
         if (query || categoryIds.length > 0) {
-          allRestaurants = await api.searchRestaurants(
-            query || undefined,
-            categoryIds
-          );
+          // Nếu filters.type === "restaurant", truyền restaurantCategoryIds
+          // Nếu filters.type === "product" hoặc null, truyền productCategoryIds
+          if (filters.type === "restaurant") {
+            allRestaurants = await api.searchRestaurants(
+              query || undefined,
+              undefined, // productCategoryIds
+              categoryIds // restaurantCategoryIds
+            );
+          } else {
+            allRestaurants = await api.searchRestaurants(
+              query || undefined,
+              categoryIds, // productCategoryIds
+              undefined // restaurantCategoryIds
+            );
+          }
         } else {
           allRestaurants = await api.getAllRestaurants(page, 5);
         }
@@ -224,9 +253,23 @@ const SearchScreen = () => {
         const restaurantsData = allRestaurants.slice(startIndex, endIndex);
 
         if (reset) {
+          // Loại bỏ duplicate khi reset
+          const uniqueRestaurants = Array.from(
+            new Map(allRestaurants.map((r) => [r.id, r])).values()
+          );
+          setAllRestaurants(uniqueRestaurants);
           setRestaurants(restaurantsData);
         } else {
-          setRestaurants((prev) => [...prev, ...restaurantsData]);
+          setAllRestaurants((prev) => {
+            // Loại bỏ duplicate khi thêm mới
+            const combined = [...prev, ...restaurantsData];
+            return Array.from(new Map(combined.map((r) => [r.id, r])).values());
+          });
+          setRestaurants((prev) => {
+            // Loại bỏ duplicate trong restaurants hiển thị
+            const combined = [...prev, ...restaurantsData];
+            return Array.from(new Map(combined.map((r) => [r.id, r])).values());
+          });
         }
 
         setRestaurantsHasMore(endIndex < allRestaurants.length);
@@ -246,20 +289,61 @@ const SearchScreen = () => {
     ]
   );
 
+  // Filter products and restaurants based on searchQuery (real-time)
   useEffect(() => {
-    const handler = setTimeout(() => {
-      const trimmed = searchQuery.trim();
-      setFilters((prev) =>
-        prev.query === trimmed ? prev : { ...prev, query: trimmed }
-      );
-    }, 300);
-    return () => clearTimeout(handler);
-  }, [searchQuery]);
+    const trimmedQuery = searchQuery.trim().toLowerCase();
+
+    // Loại bỏ duplicate dựa trên id trước khi filter
+    const uniqueProducts = Array.from(
+      new Map(allProducts.map((p) => [p.id, p])).values()
+    );
+    const uniqueRestaurants = Array.from(
+      new Map(allRestaurants.map((r) => [r.id, r])).values()
+    );
+
+    if (trimmedQuery === "") {
+      // Nếu searchQuery trống, hiển thị lại tất cả dữ liệu đã load
+      setFilteredProducts(uniqueProducts);
+      if (uniqueProducts.length > 0) {
+        const limit = productsDisplayLimit;
+        const productsData = uniqueProducts.slice(0, limit);
+        setProducts(productsData);
+        setProductsHasMore(uniqueProducts.length > limit);
+      }
+      if (uniqueRestaurants.length > 0) {
+        const limit = 5;
+        const restaurantsData = uniqueRestaurants.slice(0, limit);
+        setRestaurants(restaurantsData);
+        setRestaurantsHasMore(uniqueRestaurants.length > limit);
+      }
+    } else {
+      // Filter products theo tên (chứa các chữ cái đúng thứ tự)
+      const filtered = uniqueProducts.filter((product) => {
+        const productName = (product.name || "").toLowerCase();
+        return productName.includes(trimmedQuery);
+      });
+      setFilteredProducts(filtered);
+      const limit = productsDisplayLimit;
+      const productsData = filtered.slice(0, limit);
+      setProducts(productsData);
+      setProductsHasMore(filtered.length > limit);
+
+      // Filter restaurants theo tên (chứa các chữ cái đúng thứ tự)
+      const filteredRestaurants = uniqueRestaurants.filter((restaurant) => {
+        const restaurantName = (restaurant.name || "").toLowerCase();
+        return restaurantName.includes(trimmedQuery);
+      });
+      const restaurantsData = filteredRestaurants.slice(0, 5);
+      setRestaurants(restaurantsData);
+      setRestaurantsHasMore(filteredRestaurants.length > 5);
+    }
+  }, [searchQuery, allProducts, allRestaurants, productsDisplayLimit]);
 
   // Load data when filters change
   useEffect(() => {
     setProductsPage(1);
     setRestaurantsPage(1);
+    setProductsDisplayLimit(5); // Reset display limit khi filter thay đổi
     // Truyền cả query và categoryIds để đảm bảo search đúng
     // Chỉ load products nếu selectedFilter là "all" hoặc "product", hoặc filters.type là "product"
     if (
@@ -290,42 +374,41 @@ const SearchScreen = () => {
   };
 
   const handleFilterConfirm = (newFilters: SearchFilters) => {
+    // Set searchQuery trước
     if (typeof newFilters.query === "string") {
       setSearchQuery(newFilters.query);
     }
-    // Cập nhật selectedFilter dựa trên type trước
-    if (newFilters.type) {
-      setSelectedFilter(newFilters.type);
-    }
-    // Cập nhật filters sau để trigger useEffect
-    // Chỉ update nếu có thay đổi thực sự để tránh vòng lặp
-    setFilters((prev) => {
-      const categoryIdsChanged =
-        prev.categoryIds.length !== newFilters.categoryIds.length ||
-        !prev.categoryIds.every(
-          (id, idx) => id === newFilters.categoryIds[idx]
-        );
 
-      if (
-        prev.query === newFilters.query &&
-        prev.type === newFilters.type &&
-        !categoryIdsChanged
-      ) {
-        return prev; // Không có thay đổi, giữ nguyên để tránh re-render
-      }
-      return {
-        query: newFilters.query ?? prev.query,
-        type: newFilters.type,
-        categoryIds: newFilters.categoryIds || [],
-      };
+    // Điều hướng đến filter đúng dựa trên type
+    if (newFilters.type === "product") {
+      setSelectedFilter("product");
+    } else if (newFilters.type === "restaurant") {
+      setSelectedFilter("restaurant");
+    }
+
+    // Cập nhật filters để trigger useEffect load data
+    setFilters({
+      query: newFilters.query ?? "",
+      type: newFilters.type,
+      categoryIds: newFilters.categoryIds || [],
     });
   };
 
   const handleLoadMoreProducts = () => {
     if (productsHasMore && !productsLoading) {
-      const nextPage = productsPage + 1;
-      setProductsPage(nextPage);
-      loadProducts(nextPage, false, filters.query, filters.categoryIds);
+      // Nếu có searchQuery, load thêm từ filteredProducts
+      if (searchQuery.trim() !== "" || filteredProducts.length > 0) {
+        const newLimit = productsDisplayLimit + 5;
+        setProductsDisplayLimit(newLimit);
+        const productsData = filteredProducts.slice(0, newLimit);
+        setProducts(productsData);
+        setProductsHasMore(filteredProducts.length > newLimit);
+      } else {
+        // Nếu không có searchQuery, load thêm từ API
+        const nextPage = productsPage + 1;
+        setProductsPage(nextPage);
+        loadProducts(nextPage, false, filters.query, filters.categoryIds);
+      }
     }
   };
 
@@ -602,7 +685,7 @@ const SearchScreen = () => {
                 renderItem={({ item }) =>
                   renderProduct({ item, isVertical: false })
                 }
-                keyExtractor={(item) => `product-${item.id}`}
+                keyExtractor={(item, index) => `product-${item.id}-${index}`}
                 horizontal
                 showsHorizontalScrollIndicator={false}
                 contentContainerStyle={styles.productList}
@@ -638,9 +721,9 @@ const SearchScreen = () => {
                 ) : (
                   <>
                     <View style={styles.productsList}>
-                      {products.map((item) => (
+                      {products.map((item, index) => (
                         <View
-                          key={`product-${item.id}`}
+                          key={`product-${item.id}-${index}`}
                           style={styles.productListItem}
                         >
                           {renderProduct({ item, isVertical: true })}

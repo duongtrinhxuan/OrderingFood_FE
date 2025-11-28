@@ -16,8 +16,6 @@ import Icon from "react-native-vector-icons/MaterialIcons";
 import { theme } from "../../theme/theme";
 import RestaurantCard from "../../components/RestaurantCard";
 import FoodCard from "../../components/FoodCard";
-import CategoryChip from "../../components/CategoryChip";
-import DiscountCard from "../../components/DiscountCard";
 import { useNavigation } from "@react-navigation/native";
 import { useAuth } from "../../context/AuthContext";
 import { useCart } from "../../context/CartContext";
@@ -26,6 +24,7 @@ import {
   calculateDistance,
   formatDistance,
   calculateDeliveryTime,
+  formatDate,
 } from "../../utils/helpers";
 
 interface Product {
@@ -84,9 +83,6 @@ interface ProductCategory {
 }
 
 const HomeScreen = () => {
-  const [searchQuery, setSearchQuery] = useState("");
-  const [selectedCategories, setSelectedCategories] = useState<number[]>([]);
-  const [categories, setCategories] = useState<ProductCategory[]>([]);
   const [discounts, setDiscounts] = useState<Discount[]>([]);
   const [popularProducts, setPopularProducts] = useState<Product[]>([]);
   const [nearbyRestaurants, setNearbyRestaurants] = useState<Restaurant[]>([]);
@@ -146,65 +142,23 @@ const HomeScreen = () => {
     try {
       setLoading(true);
 
-      // Load categories
-      const categoriesData = await api.getProductCategories();
-      setCategories(categoriesData as ProductCategory[]);
-
-      // Load discounts (Active status, sorted by startTime, limit 3)
+      // Load discounts (Active status, sorted by startTime)
       const discountsData = await api.getDiscounts();
       const activeDiscounts = (discountsData as Discount[])
-        .filter((d) => d.status === "Active")
+        .filter((d) => d.status === "ACTIVE" || d.status === "Active")
         .sort(
           (a, b) =>
             new Date(a.startTime).getTime() - new Date(b.startTime).getTime()
-        )
-        .slice(0, 3);
+        );
       setDiscounts(activeDiscounts);
 
       // Load popular products (top 5 có nhiều order nhất)
       const popularProductsData = await api.getPopularProducts();
-      const selectedSet = new Set(selectedCategories);
-      const getCategoryId = (category: any) => {
-        if (!category) return null;
-        if (typeof category === "number") return category;
-        return (
-          category.id ?? category.categoryId ?? category.category?.id ?? null
-        );
-      };
-      const matchesProductCategories = (product: Product) => {
-        if (selectedSet.size === 0) return true;
-        if (product.isActive === false || product.available === false) {
-          return false;
-        }
-        if (!product.categories || product.categories.length === 0) {
-          return false;
-        }
-        return product.categories.some((category: any) => {
-          const categoryId = getCategoryId(category);
-          return categoryId !== null && selectedSet.has(categoryId);
-        });
-      };
-
-      let popular = popularProductsData as Product[];
-      if (selectedSet.size > 0) {
-        popular = popular.filter((product) =>
-          matchesProductCategories(product)
-        );
-      }
-      setPopularProducts(popular);
+      setPopularProducts(popularProductsData as Product[]);
 
       // Load restaurants and calculate distance
-      let restaurants: Restaurant[] = [];
-      if (selectedSet.size > 0) {
-        const filteredRestaurants = await api.searchRestaurants(
-          undefined,
-          selectedCategories
-        );
-        restaurants = filteredRestaurants as Restaurant[];
-      } else {
-        const restaurantsData = await api.getAllRestaurants(1, 10);
-        restaurants = restaurantsData as Restaurant[];
-      }
+      const restaurantsData = await api.getAllRestaurants(1, 10);
+      let restaurants = restaurantsData as Restaurant[];
 
       // Calculate distance if user has default address
       if (userDefaultAddress) {
@@ -228,13 +182,6 @@ const HomeScreen = () => {
         });
       }
 
-      if (selectedSet.size > 0) {
-        restaurants = restaurants.filter((restaurant: any) =>
-          (restaurant.products || []).some((product: any) =>
-            matchesProductCategories(product)
-          )
-        );
-      }
       setNearbyRestaurants(restaurants.slice(0, 5));
     } catch (error: any) {
       console.error("Error loading data:", error);
@@ -242,7 +189,7 @@ const HomeScreen = () => {
     } finally {
       setLoading(false);
     }
-  }, [userDefaultAddress, selectedCategories]);
+  }, [userDefaultAddress]);
 
   useEffect(() => {
     loadData();
@@ -254,32 +201,8 @@ const HomeScreen = () => {
     loadData().finally(() => setRefreshing(false));
   }, [loadData]);
 
-  const handleSearch = () => {
-    if (searchQuery.trim()) {
-      navigation.navigate("Search", {
-        query: searchQuery.trim(),
-        categoryIds: selectedCategories,
-      });
-    }
-  };
-
-  const handleFilterPress = () => {
-    navigation.navigate("Search", {
-      showFilter: true,
-    });
-  };
-
-  const handleCategorySelect = (categoryId: number | null) => {
-    if (categoryId === null) {
-      setSelectedCategories([]);
-      return;
-    }
-    setSelectedCategories((prev) => {
-      if (prev.includes(categoryId)) {
-        return prev.filter((id) => id !== categoryId);
-      }
-      return [...prev, categoryId];
-    });
+  const handleSearchPress = () => {
+    navigation.navigate("Search" as never);
   };
 
   const renderRestaurant = ({ item }: { item: any }) => {
@@ -453,7 +376,30 @@ const HomeScreen = () => {
   };
 
   const renderDiscount = ({ item }: { item: Discount }) => (
-    <DiscountCard discount={item} />
+    <View style={styles.discountCard}>
+      <View style={styles.discountCardHeader}>
+        <View style={styles.discountCodeBadge}>
+          <Icon name="local-offer" size={18} color={theme.colors.primary} />
+          <Text style={styles.discountCodeText}>{item.code}</Text>
+        </View>
+        <Text style={styles.discountStatusBadge}>ACTIVE</Text>
+      </View>
+      <Text style={styles.discountDescription}>
+        {item.description || "Không có mô tả"}
+      </Text>
+      <View style={styles.discountTimeRow}>
+        <Icon name="schedule" size={16} color={theme.colors.mediumGray} />
+        <Text style={styles.discountTimeLabel}>
+          Bắt đầu: {item.startTime ? formatDate(item.startTime) : "Không rõ"}
+        </Text>
+      </View>
+      <View style={styles.discountTimeRow}>
+        <Icon name="event" size={16} color={theme.colors.mediumGray} />
+        <Text style={styles.discountTimeLabel}>
+          Kết thúc: {item.endTime ? formatDate(item.endTime) : "Không rõ"}
+        </Text>
+      </View>
+    </View>
   );
 
   if (loading) {
@@ -472,56 +418,28 @@ const HomeScreen = () => {
         <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
       }
     >
-      {/* Header with search */}
+      {/* Header with search icon */}
       <LinearGradient
         colors={[theme.colors.primary, theme.colors.secondary]}
         style={styles.header}
       >
-        <View style={styles.searchContainer}>
-          <Icon name="search" size={24} color={theme.colors.mediumGray} />
-          <TextInput
-            style={styles.searchInput}
-            placeholder="Tìm món ăn, nhà hàng..."
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-            onSubmitEditing={handleSearch}
-            placeholderTextColor={theme.colors.placeholder}
-          />
+        <View style={styles.headerContent}>
+          <Text style={styles.headerTitle}>Trang chủ</Text>
           <TouchableOpacity
-            style={styles.filterButton}
-            onPress={handleFilterPress}
+            style={styles.searchIconButton}
+            onPress={handleSearchPress}
           >
-            <Icon name="tune" size={24} color={theme.colors.primary} />
+            <Icon name="search" size={24} color={theme.colors.surface} />
           </TouchableOpacity>
         </View>
       </LinearGradient>
 
-      {/* Categories */}
-      <View style={styles.categoriesContainer}>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.categoriesScroll}
-        >
-          <CategoryChip
-            title="Tất cả"
-            isSelected={selectedCategories.length === 0}
-            onPress={() => handleCategorySelect(null)}
-          />
-          {categories.map((category) => (
-            <CategoryChip
-              key={category.id}
-              title={category.name}
-              isSelected={selectedCategories.includes(category.id)}
-              onPress={() => handleCategorySelect(category.id)}
-            />
-          ))}
-        </ScrollView>
-      </View>
-
       {/* Discounts - hiển thị dọc */}
       {discounts.length > 0 && (
         <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Mã giảm giá</Text>
+          </View>
           <FlatList
             data={discounts}
             renderItem={renderDiscount}
@@ -593,31 +511,20 @@ const styles = StyleSheet.create({
     paddingBottom: theme.spacing.lg,
     paddingHorizontal: theme.spacing.lg,
   },
-  searchContainer: {
+  headerContent: {
     flexDirection: "row",
+    justifyContent: "space-between",
     alignItems: "center",
-    backgroundColor: theme.colors.surface,
-    borderRadius: theme.roundness,
-    paddingHorizontal: theme.spacing.md,
-    paddingVertical: theme.spacing.sm,
-    ...theme.shadows.small,
   },
-  searchInput: {
-    flex: 1,
-    marginLeft: theme.spacing.sm,
-    fontSize: 16,
-    color: theme.colors.text,
+  headerTitle: {
+    fontSize: 24,
+    fontWeight: "bold",
+    color: theme.colors.surface,
   },
-  filterButton: {
+  searchIconButton: {
     padding: theme.spacing.sm,
-    backgroundColor: theme.colors.lightOrange,
-    borderRadius: theme.roundness / 2,
-  },
-  categoriesContainer: {
-    paddingVertical: theme.spacing.md,
-  },
-  categoriesScroll: {
-    paddingHorizontal: theme.spacing.lg,
+    borderRadius: theme.roundness,
+    backgroundColor: "rgba(255, 255, 255, 0.2)",
   },
   section: {
     marginBottom: theme.spacing.xl,
@@ -641,7 +548,54 @@ const styles = StyleSheet.create({
   },
   discountList: {
     paddingHorizontal: theme.spacing.lg,
-    gap: theme.spacing.md,
+  },
+  discountCard: {
+    width: "100%",
+    backgroundColor: theme.colors.background,
+    borderRadius: theme.roundness,
+    padding: theme.spacing.md,
+    marginBottom: theme.spacing.md,
+    ...theme.shadows.small,
+  },
+  discountCardHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: theme.spacing.sm,
+  },
+  discountCodeBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing.xs,
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: theme.spacing.xs,
+    borderRadius: theme.roundness,
+    backgroundColor: theme.colors.surface,
+  },
+  discountCodeText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: theme.colors.primary,
+  },
+  discountStatusBadge: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: theme.colors.success,
+  },
+  discountDescription: {
+    fontSize: 14,
+    color: theme.colors.text,
+    marginBottom: theme.spacing.sm,
+  },
+  discountTimeRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing.xs,
+    marginTop: theme.spacing.xs,
+  },
+  discountTimeLabel: {
+    fontSize: 13,
+    color: theme.colors.mediumGray,
   },
   foodList: {
     paddingHorizontal: theme.spacing.lg,

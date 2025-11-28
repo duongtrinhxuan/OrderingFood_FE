@@ -38,11 +38,42 @@ const FilterModal: React.FC<FilterModalProps> = ({
   const [restaurantCategories, setRestaurantCategories] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
 
+  // State để filter categories real-time theo searchQuery
+  const [filteredProductCategories, setFilteredProductCategories] = useState<
+    any[]
+  >([]);
+  const [filteredRestaurantCategories, setFilteredRestaurantCategories] =
+    useState<any[]>([]);
+
   useEffect(() => {
     if (visible) {
       loadCategories();
     }
   }, [visible]);
+
+  // Filter categories real-time theo searchQuery (giống thanh tìm kiếm bên ngoài)
+  useEffect(() => {
+    const trimmedQuery = searchQuery.trim().toLowerCase();
+
+    if (trimmedQuery === "") {
+      setFilteredProductCategories(productCategories);
+      setFilteredRestaurantCategories(restaurantCategories);
+    } else {
+      // Filter product categories theo tên
+      const filtered = productCategories.filter((category) => {
+        const categoryName = (category.name || "").toLowerCase();
+        return categoryName.includes(trimmedQuery);
+      });
+      setFilteredProductCategories(filtered);
+
+      // Filter restaurant categories theo tên
+      const filteredRest = restaurantCategories.filter((category) => {
+        const categoryName = (category.name || "").toLowerCase();
+        return categoryName.includes(trimmedQuery);
+      });
+      setFilteredRestaurantCategories(filteredRest);
+    }
+  }, [searchQuery, productCategories, restaurantCategories]);
 
   const loadCategories = async () => {
     try {
@@ -51,8 +82,13 @@ const FilterModal: React.FC<FilterModalProps> = ({
         api.getProductCategories(),
         api.getRestaurantCategories(),
       ]);
-      setProductCategories(productCats as any[]);
-      setRestaurantCategories(restaurantCats as any[]);
+      const productCatsArray = productCats as any[];
+      const restaurantCatsArray = restaurantCats as any[];
+      setProductCategories(productCatsArray);
+      setRestaurantCategories(restaurantCatsArray);
+      // Khởi tạo filtered categories
+      setFilteredProductCategories(productCatsArray);
+      setFilteredRestaurantCategories(restaurantCatsArray);
     } catch (error) {
       console.error("Error loading categories:", error);
     } finally {
@@ -76,7 +112,9 @@ const FilterModal: React.FC<FilterModalProps> = ({
   };
 
   const currentCategories =
-    selectedType === "product" ? productCategories : restaurantCategories;
+    selectedType === "product"
+      ? filteredProductCategories
+      : filteredRestaurantCategories;
 
   return (
     <Modal

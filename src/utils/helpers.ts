@@ -89,15 +89,12 @@ export const calculateDeliveryTime = (distance: number): string => {
   if (!distance || distance <= 0) {
     return "Không xác định";
   }
-  // 1 giờ đi được 50km, nên lấy khoảng cách chia 50 để ra số giờ
+  // 1 giờ đi được 50km, nên lấy khoảng cách chia 50 để ra số giờ, rồi nhân 60 để đổi ra phút
   const hours = distance / 50;
   const minutes = Math.round(hours * 60);
 
-  // Format: "X phút" hoặc "X-Y phút" (thêm buffer 10 phút)
-  if (minutes < 30) {
-    return `${Math.max(15, minutes)}-${minutes + 10} phút`;
-  }
-  return `${minutes}-${minutes + 15} phút`;
+  // Format: "X phút" (chỉ hiển thị số phút, không có khoảng)
+  return `${minutes} phút`;
 };
 
 // Validate email
