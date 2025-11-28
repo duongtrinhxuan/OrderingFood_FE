@@ -109,6 +109,12 @@ const FilterModal: React.FC<FilterModalProps> = ({
     setSearchQuery("");
     setSelectedType(null);
     setSelectedCategoryIds([]);
+    // Gọi onConfirm với filters rỗng để reset trang tìm kiếm
+    onConfirm({
+      query: "",
+      type: null,
+      categoryIds: [],
+    });
   };
 
   const currentCategories =
@@ -128,7 +134,17 @@ const FilterModal: React.FC<FilterModalProps> = ({
           {/* Header */}
           <View style={styles.header}>
             <Text style={styles.title}>Tìm kiếm nâng cao</Text>
-            <TouchableOpacity onPress={onClose}>
+            <TouchableOpacity
+              onPress={() => {
+                // Reset filters khi đóng modal
+                onConfirm({
+                  query: "",
+                  type: null,
+                  categoryIds: [],
+                });
+                onClose();
+              }}
+            >
               <Icon name="close" size={24} color={theme.colors.text} />
             </TouchableOpacity>
           </View>

@@ -143,35 +143,78 @@ const SearchScreen = () => {
       overrideQuery?: string,
       overrideCategoryIds?: number[]
     ) => {
-      if (productsLoading) return;
+      console.log("[loadProducts] Function called with:", {
+        page,
+        reset,
+        overrideQuery,
+        overrideCategoryIds,
+        productsLoading,
+      });
+
+      if (productsLoading) {
+        console.log("[loadProducts] Already loading, skipping...");
+        return;
+      }
 
       try {
         setProductsLoading(true);
         const query = overrideQuery ?? searchQuery;
         const categoryIds = overrideCategoryIds ?? filters.categoryIds;
+        console.log(
+          "[loadProducts] Starting load - page:",
+          page,
+          "reset:",
+          reset,
+          "query:",
+          query,
+          "categoryIds:",
+          categoryIds
+        );
         let allProducts: any[] = [];
 
-        if (query || categoryIds.length > 0) {
-          allProducts = await api.searchProducts(
+        // Nếu không có query và không có categoryIds, load tất cả products
+        if (!query && categoryIds.length === 0) {
+          allProducts = await api.getAllProducts(page, 50);
+        } else {
+          // Có query hoặc categoryIds, dùng search API
+          // Nếu chỉ có categoryIds mà không có query, vẫn gọi searchProducts với query = undefined
+          console.log(
+            "[loadProducts] Calling searchProducts with query:",
             query || undefined,
+            "categoryIds:",
             categoryIds
           );
-        } else {
-          allProducts = await api.getAllProducts(page, 5);
+          allProducts = await api.searchProducts(
+            query || undefined,
+            categoryIds.length > 0 ? categoryIds : undefined
+          );
+          console.log(
+            "[loadProducts] Received products:",
+            allProducts.length,
+            "products"
+          );
         }
 
-        const limit = 5;
-        const startIndex = (page - 1) * limit;
-        const endIndex = startIndex + limit;
-        const productsData = allProducts.slice(startIndex, endIndex);
-
+        // Khi reset, lưu tất cả products vào allProducts và filteredProducts
+        // useEffect filter sẽ tự động cập nhật products từ allProducts
         if (reset) {
           // Loại bỏ duplicate khi reset
           const uniqueProducts = Array.from(
             new Map(allProducts.map((p) => [p.id, p])).values()
           );
+          console.log(
+            "[loadProducts] Reset - Setting allProducts:",
+            uniqueProducts.length,
+            "products"
+          );
+          console.log(
+            "[loadProducts] Sample products:",
+            uniqueProducts.slice(0, 3).map((p) => ({ id: p.id, name: p.name }))
+          );
           setAllProducts(uniqueProducts);
-          setProducts(productsData);
+          setFilteredProducts(uniqueProducts); // Cập nhật filteredProducts khi reset
+          // Cập nhật products ngay lập tức để đảm bảo hiển thị
+          setProducts(uniqueProducts);
         } else {
           setAllProducts((prev) => {
             // Loại bỏ duplicate khi thêm mới
@@ -183,14 +226,21 @@ const SearchScreen = () => {
             const combined = [...prev, ...productsData];
             return Array.from(new Map(combined.map((p) => [p.id, p])).values());
           });
+          setProductsHasMore(endIndex < allProducts.length);
         }
 
-        setProductsHasMore(endIndex < allProducts.length);
+        // Nếu reset, set hasMore dựa trên allProducts.length
+        if (reset) {
+          setProductsHasMore(false); // Khi reset với advanced filters, không có more
+        }
       } catch (error: any) {
-        console.error("Error loading products:", error);
+        console.error("[loadProducts] Error loading products:", error);
         Alert.alert("Lỗi", "Không thể tải danh sách món ăn.");
       } finally {
         setProductsLoading(false);
+        console.log(
+          "[loadProducts] Finished loading, productsLoading set to false"
+        );
       }
     },
     [filters.categoryIds.join(","), searchQuery, productsLoading]
@@ -212,24 +262,26 @@ const SearchScreen = () => {
         const categoryIds = overrideCategoryIds ?? filters.categoryIds;
         let allRestaurants: any[] = [];
 
-        if (query || categoryIds.length > 0) {
+        // Nếu không có query và không có categoryIds, load tất cả restaurants
+        if (!query && categoryIds.length === 0) {
+          allRestaurants = await api.getAllRestaurants(page, 50);
+        } else {
+          // Có query hoặc categoryIds, dùng search API
           // Nếu filters.type === "restaurant", truyền restaurantCategoryIds
           // Nếu filters.type === "product" hoặc null, truyền productCategoryIds
           if (filters.type === "restaurant") {
             allRestaurants = await api.searchRestaurants(
               query || undefined,
               undefined, // productCategoryIds
-              categoryIds // restaurantCategoryIds
+              categoryIds.length > 0 ? categoryIds : undefined // restaurantCategoryIds
             );
           } else {
             allRestaurants = await api.searchRestaurants(
               query || undefined,
-              categoryIds, // productCategoryIds
+              categoryIds.length > 0 ? categoryIds : undefined, // productCategoryIds
               undefined // restaurantCategoryIds
             );
           }
-        } else {
-          allRestaurants = await api.getAllRestaurants(page, 5);
         }
 
         if (userDefaultAddress) {
@@ -290,9 +342,57 @@ const SearchScreen = () => {
   );
 
   // Filter products and restaurants based on searchQuery (real-time)
+  // Chỉ filter khi không có filters từ FilterModal (filters.query === "" và filters.categoryIds.length === 0)
   useEffect(() => {
     const trimmedQuery = searchQuery.trim().toLowerCase();
+    const hasAdvancedFilters =
+      filters.query !== "" || filters.categoryIds.length > 0;
 
+    console.log(
+      "[useEffect filter] searchQuery:",
+      searchQuery,
+      "hasAdvancedFilters:",
+      hasAdvancedFilters,
+      "allProducts.length:",
+      allProducts.length,
+      "filters:",
+      filters
+    );
+
+    // Nếu có advanced filters, không filter theo searchQuery nữa (đã filter ở backend)
+    if (hasAdvancedFilters) {
+      // Chỉ cập nhật display limit cho products và restaurants
+      const uniqueProducts = Array.from(
+        new Map(allProducts.map((p) => [p.id, p])).values()
+      );
+      const uniqueRestaurants = Array.from(
+        new Map(allRestaurants.map((r) => [r.id, r])).values()
+      );
+
+      console.log(
+        "[useEffect filter] hasAdvancedFilters=true, uniqueProducts:",
+        uniqueProducts.length,
+        "filters:",
+        filters
+      );
+      console.log(
+        "[useEffect filter] Sample products:",
+        uniqueProducts.slice(0, 3).map((p) => ({ id: p.id, name: p.name }))
+      );
+
+      // Cập nhật filteredProducts và products từ allProducts (đã được filter ở backend)
+      setFilteredProducts(uniqueProducts);
+      // Hiển thị tất cả products khi có advanced filters (không limit)
+      setProducts(uniqueProducts);
+      setProductsHasMore(false); // Không có more khi đã load tất cả từ backend
+
+      const restaurantsToShow = uniqueRestaurants.slice(0, 5);
+      setRestaurants(restaurantsToShow);
+      setRestaurantsHasMore(uniqueRestaurants.length > 5);
+      return;
+    }
+
+    // Nếu không có advanced filters, filter theo searchQuery (thanh tìm kiếm đơn lẻ)
     // Loại bỏ duplicate dựa trên id trước khi filter
     const uniqueProducts = Array.from(
       new Map(allProducts.map((p) => [p.id, p])).values()
@@ -337,29 +437,76 @@ const SearchScreen = () => {
       setRestaurants(restaurantsData);
       setRestaurantsHasMore(filteredRestaurants.length > 5);
     }
-  }, [searchQuery, allProducts, allRestaurants, productsDisplayLimit]);
+  }, [
+    searchQuery,
+    allProducts,
+    allRestaurants,
+    productsDisplayLimit,
+    filters.query,
+    filters.categoryIds.length,
+    filters.type, // Thêm filters.type vào dependencies
+  ]);
 
   // Load data when filters change
   useEffect(() => {
+    console.log(
+      "[useEffect filters] Triggered with filters:",
+      filters,
+      "selectedFilter:",
+      selectedFilter
+    );
     setProductsPage(1);
     setRestaurantsPage(1);
     setProductsDisplayLimit(5); // Reset display limit khi filter thay đổi
-    // Truyền cả query và categoryIds để đảm bảo search đúng
-    // Chỉ load products nếu selectedFilter là "all" hoặc "product", hoặc filters.type là "product"
-    if (
-      selectedFilter === "all" ||
-      selectedFilter === "product" ||
-      filters.type === "product"
-    ) {
-      loadProducts(1, true, filters.query, filters.categoryIds);
-    }
-    // Chỉ load restaurants nếu selectedFilter là "all" hoặc "restaurant", hoặc filters.type là "restaurant"
-    if (
-      selectedFilter === "all" ||
-      selectedFilter === "restaurant" ||
-      filters.type === "restaurant"
-    ) {
-      loadRestaurants(1, true, filters.query, filters.categoryIds);
+
+    // Nếu filters rỗng (reset), load tất cả
+    const isReset =
+      !filters.query && filters.categoryIds.length === 0 && !filters.type;
+
+    console.log("[useEffect filters] isReset:", isReset);
+
+    if (isReset) {
+      // Reset về trạng thái ban đầu
+      if (selectedFilter === "all" || selectedFilter === "product") {
+        loadProducts(1, true, "", []);
+      }
+      if (selectedFilter === "all" || selectedFilter === "restaurant") {
+        loadRestaurants(1, true, "", []);
+      }
+    } else {
+      // Có filters từ FilterModal
+      // Chỉ load products nếu selectedFilter là "all" hoặc "product", hoặc filters.type là "product"
+      const shouldLoadProducts =
+        selectedFilter === "all" ||
+        selectedFilter === "product" ||
+        filters.type === "product";
+
+      console.log(
+        "[useEffect filters] shouldLoadProducts:",
+        shouldLoadProducts,
+        "selectedFilter:",
+        selectedFilter,
+        "filters.type:",
+        filters.type,
+        "filters:",
+        filters
+      );
+
+      if (shouldLoadProducts) {
+        console.log(
+          "[useEffect filters] Calling loadProducts with filters:",
+          filters
+        );
+        loadProducts(1, true, filters.query, filters.categoryIds);
+      }
+      // Chỉ load restaurants nếu selectedFilter là "all" hoặc "restaurant", hoặc filters.type là "restaurant"
+      if (
+        selectedFilter === "all" ||
+        selectedFilter === "restaurant" ||
+        filters.type === "restaurant"
+      ) {
+        loadRestaurants(1, true, filters.query, filters.categoryIds);
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
@@ -374,24 +521,29 @@ const SearchScreen = () => {
   };
 
   const handleFilterConfirm = (newFilters: SearchFilters) => {
-    // Set searchQuery trước
-    if (typeof newFilters.query === "string") {
-      setSearchQuery(newFilters.query);
-    }
+    console.log("[handleFilterConfirm] newFilters:", newFilters);
+    // Reset searchQuery về rỗng khi dùng advanced filter
+    setSearchQuery("");
 
     // Điều hướng đến filter đúng dựa trên type
     if (newFilters.type === "product") {
       setSelectedFilter("product");
     } else if (newFilters.type === "restaurant") {
       setSelectedFilter("restaurant");
+    } else {
+      // Nếu không có type, về "all"
+      setSelectedFilter("all");
     }
 
     // Cập nhật filters để trigger useEffect load data
-    setFilters({
+    // Không gọi loadProducts trực tiếp ở đây, để useEffect filters xử lý
+    const updatedFilters = {
       query: newFilters.query ?? "",
       type: newFilters.type,
       categoryIds: newFilters.categoryIds || [],
-    });
+    };
+    console.log("[handleFilterConfirm] Setting filters:", updatedFilters);
+    setFilters(updatedFilters);
   };
 
   const handleLoadMoreProducts = () => {
