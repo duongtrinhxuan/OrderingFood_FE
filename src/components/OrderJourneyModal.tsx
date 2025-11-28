@@ -14,7 +14,7 @@ import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from "react-native-maps";
 import Icon from "react-native-vector-icons/MaterialIcons";
 import { theme } from "../theme/theme";
 import { api } from "../services/api";
-import { formatDateTime } from "../utils/helpers";
+import { formatDateTime, formatDate } from "../utils/helpers";
 import * as Location from "expo-location";
 
 export interface OrderJourney {
@@ -49,6 +49,7 @@ const OrderJourneyModal: React.FC<OrderJourneyModalProps> = ({
   const [isCreating, setIsCreating] = useState(false);
   const [content, setContent] = useState("");
   const [timeline, setTimeline] = useState("");
+  const [timelineDate, setTimelineDate] = useState<Date | null>(null);
   const [latitudeText, setLatitudeText] = useState("");
   const [longitudeText, setLongitudeText] = useState("");
   const [selectedLocation, setSelectedLocation] = useState<{
@@ -62,6 +63,15 @@ const OrderJourneyModal: React.FC<OrderJourneyModalProps> = ({
     street: string;
   } | null>(null);
   const [loadingAddress, setLoadingAddress] = useState(false);
+  const [dateTimePickerVisible, setDateTimePickerVisible] = useState(false);
+  const [selectedDate, setSelectedDate] = useState<Date>(new Date());
+  const [selectedTime, setSelectedTime] = useState<{
+    hours: number;
+    minutes: number;
+  }>({
+    hours: new Date().getHours(),
+    minutes: new Date().getMinutes(),
+  });
 
   const loadJourneys = useCallback(async () => {
     if (!orderId) return;
@@ -69,9 +79,14 @@ const OrderJourneyModal: React.FC<OrderJourneyModalProps> = ({
       setLoading(true);
       const data = await api.getOrderJourneys(orderId);
       const list = (data as OrderJourney[]) || [];
-      // Sort by timeline, then by createdAt
+      // Sort by timeline (datetime), then by createdAt
       list.sort((a, b) => {
         if (a.timeline && b.timeline) {
+          const aTime = new Date(a.timeline).getTime();
+          const bTime = new Date(b.timeline).getTime();
+          if (!isNaN(aTime) && !isNaN(bTime)) {
+            return aTime - bTime;
+          }
           return a.timeline.localeCompare(b.timeline);
         }
         if (a.timeline) return -1;
@@ -152,6 +167,7 @@ const OrderJourneyModal: React.FC<OrderJourneyModalProps> = ({
     setEditingJourney(null);
     setContent("");
     setTimeline("");
+    setTimelineDate(null);
     setLatitudeText("");
     setLongitudeText("");
     setSelectedLocation(null);
@@ -162,7 +178,24 @@ const OrderJourneyModal: React.FC<OrderJourneyModalProps> = ({
   const handleEditJourney = (journey: OrderJourney) => {
     setEditingJourney(journey);
     setContent(journey.content || "");
-    setTimeline(journey.timeline || "");
+    if (journey.timeline) {
+      const timelineDate = new Date(journey.timeline);
+      if (!isNaN(timelineDate.getTime())) {
+        setTimelineDate(timelineDate);
+        setTimeline(formatDateTime(timelineDate));
+        setSelectedDate(timelineDate);
+        setSelectedTime({
+          hours: timelineDate.getHours(),
+          minutes: timelineDate.getMinutes(),
+        });
+      } else {
+        setTimelineDate(null);
+        setTimeline("");
+      }
+    } else {
+      setTimelineDate(null);
+      setTimeline("");
+    }
     setLatitudeText(journey.latitude.toFixed(6));
     setLongitudeText(journey.longitude.toFixed(6));
     setSelectedLocation({
@@ -223,8 +256,8 @@ const OrderJourneyModal: React.FC<OrderJourneyModalProps> = ({
         if (content.trim()) {
           payload.content = content.trim();
         }
-        if (timeline.trim()) {
-          payload.timeline = timeline.trim();
+        if (timelineDate) {
+          payload.timeline = timelineDate.toISOString();
         }
         await api.createOrderJourney(payload);
       } else if (editingJourney) {
@@ -232,8 +265,8 @@ const OrderJourneyModal: React.FC<OrderJourneyModalProps> = ({
         if (content.trim()) {
           payload.content = content.trim();
         }
-        if (timeline.trim()) {
-          payload.timeline = timeline.trim();
+        if (timelineDate) {
+          payload.timeline = timelineDate.toISOString();
         }
         payload.latitude = finalLocation.latitude;
         payload.longtitude = finalLocation.longitude;
@@ -244,6 +277,7 @@ const OrderJourneyModal: React.FC<OrderJourneyModalProps> = ({
       setIsCreating(false);
       setContent("");
       setTimeline("");
+      setTimelineDate(null);
       setLatitudeText("");
       setLongitudeText("");
       setSelectedLocation(null);
@@ -288,41 +322,74 @@ const OrderJourneyModal: React.FC<OrderJourneyModalProps> = ({
     };
   };
 
-  const renderJourneyItem = ({ item }: { item: OrderJourney }) => (
-    <View style={styles.journeyCard}>
-      <View style={styles.journeyHeader}>
-        <View style={styles.journeyInfo}>
-          <Text style={styles.journeyTimeline}>
-            {item.timeline || "Chưa có thời gian"}
-          </Text>
-          {item.createdAt && (
-            <Text style={styles.journeyDate}>
-              {formatDateTime(item.createdAt)}
-            </Text>
+  const handleOpenDateTimePicker = () => {
+    if (timelineDate) {
+      setSelectedDate(timelineDate);
+      setSelectedTime({
+        hours: timelineDate.getHours(),
+        minutes: timelineDate.getMinutes(),
+      });
+    } else {
+      const now = new Date();
+      setSelectedDate(now);
+      setSelectedTime({
+        hours: now.getHours(),
+        minutes: now.getMinutes(),
+      });
+    }
+    setDateTimePickerVisible(true);
+  };
+
+  const handleConfirmDateTime = () => {
+    const combinedDate = new Date(selectedDate);
+    combinedDate.setHours(selectedTime.hours);
+    combinedDate.setMinutes(selectedTime.minutes);
+    combinedDate.setSeconds(0);
+    combinedDate.setMilliseconds(0);
+    setTimelineDate(combinedDate);
+    setTimeline(formatDateTime(combinedDate));
+    setDateTimePickerVisible(false);
+  };
+
+  const renderJourneyItem = ({ item }: { item: OrderJourney }) => {
+    const timelineDisplay = item.timeline
+      ? formatDateTime(item.timeline)
+      : "Chưa có thời gian";
+
+    return (
+      <View style={styles.journeyCard}>
+        <View style={styles.journeyHeader}>
+          <View style={styles.journeyInfo}>
+            <Text style={styles.journeyTimeline}>{timelineDisplay}</Text>
+            {item.createdAt && (
+              <Text style={styles.journeyDate}>
+                {formatDateTime(item.createdAt)}
+              </Text>
+            )}
+          </View>
+          {canEdit && (
+            <View style={styles.journeyActions}>
+              <TouchableOpacity
+                style={styles.actionButton}
+                onPress={() => handleEditJourney(item)}
+              >
+                <Icon name="edit" size={20} color={theme.colors.primary} />
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.actionButton}
+                onPress={() => handleDeleteJourney(item.id)}
+              >
+                <Icon name="delete" size={20} color={theme.colors.error} />
+              </TouchableOpacity>
+            </View>
           )}
         </View>
-        {canEdit && (
-          <View style={styles.journeyActions}>
-            <TouchableOpacity
-              style={styles.actionButton}
-              onPress={() => handleEditJourney(item)}
-            >
-              <Icon name="edit" size={20} color={theme.colors.primary} />
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.actionButton}
-              onPress={() => handleDeleteJourney(item.id)}
-            >
-              <Icon name="delete" size={20} color={theme.colors.error} />
-            </TouchableOpacity>
-          </View>
+        {item.content && (
+          <Text style={styles.journeyContent}>{item.content}</Text>
         )}
       </View>
-      {item.content && (
-        <Text style={styles.journeyContent}>{item.content}</Text>
-      )}
-    </View>
-  );
+    );
+  };
 
   return (
     <>
@@ -549,14 +616,25 @@ const OrderJourneyModal: React.FC<OrderJourneyModalProps> = ({
               </View>
 
               <View style={styles.inputGroup}>
-                <Text style={styles.label}>Thời gian (HH:mm) (tùy chọn)</Text>
-                <TextInput
-                  style={styles.input}
-                  value={timeline}
-                  onChangeText={setTimeline}
-                  placeholder="VD: 14:30"
-                  keyboardType="default"
-                />
+                <Text style={styles.label}>Thời gian (tùy chọn)</Text>
+                <TouchableOpacity
+                  style={styles.timelineInput}
+                  onPress={handleOpenDateTimePicker}
+                >
+                  <Text
+                    style={[
+                      styles.timelineInputText,
+                      !timeline && styles.timelineInputPlaceholder,
+                    ]}
+                  >
+                    {timeline || "Chọn ngày và giờ"}
+                  </Text>
+                  <Icon
+                    name="access-time"
+                    size={20}
+                    color={theme.colors.primary}
+                  />
+                </TouchableOpacity>
               </View>
 
               <TouchableOpacity
@@ -576,6 +654,181 @@ const OrderJourneyModal: React.FC<OrderJourneyModalProps> = ({
           </View>
         </Modal>
       )}
+
+      {/* DateTime Picker Modal */}
+      <Modal
+        visible={dateTimePickerVisible}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setDateTimePickerVisible(false)}
+      >
+        <View style={styles.dateTimePickerOverlay}>
+          <View style={styles.dateTimePickerContainer}>
+            <View style={styles.dateTimePickerHeader}>
+              <Text style={styles.dateTimePickerTitle}>Chọn ngày và giờ</Text>
+              <TouchableOpacity
+                onPress={() => setDateTimePickerVisible(false)}
+                style={styles.dateTimePickerCloseButton}
+              >
+                <Icon name="close" size={24} color={theme.colors.text} />
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.dateTimePickerContent}>
+              {/* Date Picker */}
+              <View style={styles.datePickerSection}>
+                <Text style={styles.dateTimePickerLabel}>Ngày</Text>
+                <View style={styles.datePickerRow}>
+                  <TouchableOpacity
+                    style={styles.datePickerButton}
+                    onPress={() => {
+                      const newDate = new Date(selectedDate);
+                      newDate.setDate(newDate.getDate() - 1);
+                      setSelectedDate(newDate);
+                    }}
+                  >
+                    <Icon
+                      name="chevron-left"
+                      size={24}
+                      color={theme.colors.primary}
+                    />
+                  </TouchableOpacity>
+                  <Text style={styles.datePickerText}>
+                    {formatDate(selectedDate, "dd/MM/yyyy")}
+                  </Text>
+                  <TouchableOpacity
+                    style={styles.datePickerButton}
+                    onPress={() => {
+                      const newDate = new Date(selectedDate);
+                      newDate.setDate(newDate.getDate() + 1);
+                      setSelectedDate(newDate);
+                    }}
+                  >
+                    <Icon
+                      name="chevron-right"
+                      size={24}
+                      color={theme.colors.primary}
+                    />
+                  </TouchableOpacity>
+                </View>
+              </View>
+
+              {/* Time Picker */}
+              <View style={styles.timePickerSection}>
+                <Text style={styles.dateTimePickerLabel}>Giờ</Text>
+                <View style={styles.timePickerRow}>
+                  <View style={styles.timePickerColumn}>
+                    <Text style={styles.timePickerLabel}>Giờ</Text>
+                    <View style={styles.timePickerControls}>
+                      <TouchableOpacity
+                        style={styles.timePickerButton}
+                        onPress={() => {
+                          setSelectedTime({
+                            ...selectedTime,
+                            hours:
+                              selectedTime.hours >= 23
+                                ? 0
+                                : selectedTime.hours + 1,
+                          });
+                        }}
+                      >
+                        <Icon
+                          name="keyboard-arrow-up"
+                          size={24}
+                          color={theme.colors.primary}
+                        />
+                      </TouchableOpacity>
+                      <Text style={styles.timePickerValue}>
+                        {String(selectedTime.hours).padStart(2, "0")}
+                      </Text>
+                      <TouchableOpacity
+                        style={styles.timePickerButton}
+                        onPress={() => {
+                          setSelectedTime({
+                            ...selectedTime,
+                            hours:
+                              selectedTime.hours <= 0
+                                ? 23
+                                : selectedTime.hours - 1,
+                          });
+                        }}
+                      >
+                        <Icon
+                          name="keyboard-arrow-down"
+                          size={24}
+                          color={theme.colors.primary}
+                        />
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+
+                  <Text style={styles.timePickerSeparator}>:</Text>
+
+                  <View style={styles.timePickerColumn}>
+                    <Text style={styles.timePickerLabel}>Phút</Text>
+                    <View style={styles.timePickerControls}>
+                      <TouchableOpacity
+                        style={styles.timePickerButton}
+                        onPress={() => {
+                          setSelectedTime({
+                            ...selectedTime,
+                            minutes:
+                              selectedTime.minutes >= 59
+                                ? 0
+                                : selectedTime.minutes + 1,
+                          });
+                        }}
+                      >
+                        <Icon
+                          name="keyboard-arrow-up"
+                          size={24}
+                          color={theme.colors.primary}
+                        />
+                      </TouchableOpacity>
+                      <Text style={styles.timePickerValue}>
+                        {String(selectedTime.minutes).padStart(2, "0")}
+                      </Text>
+                      <TouchableOpacity
+                        style={styles.timePickerButton}
+                        onPress={() => {
+                          setSelectedTime({
+                            ...selectedTime,
+                            minutes:
+                              selectedTime.minutes <= 0
+                                ? 59
+                                : selectedTime.minutes - 1,
+                          });
+                        }}
+                      >
+                        <Icon
+                          name="keyboard-arrow-down"
+                          size={24}
+                          color={theme.colors.primary}
+                        />
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                </View>
+              </View>
+            </View>
+
+            <View style={styles.dateTimePickerFooter}>
+              <TouchableOpacity
+                style={styles.dateTimePickerCancelButton}
+                onPress={() => setDateTimePickerVisible(false)}
+              >
+                <Text style={styles.dateTimePickerCancelText}>Hủy</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.dateTimePickerConfirmButton}
+                onPress={handleConfirmDateTime}
+              >
+                <Text style={styles.dateTimePickerConfirmText}>Lưu</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </>
   );
 };
@@ -781,6 +1034,149 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: theme.colors.mediumGray,
     lineHeight: 20,
+  },
+  timelineInput: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: theme.colors.background,
+    borderRadius: theme.roundness,
+    padding: theme.spacing.md,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+  },
+  timelineInputText: {
+    fontSize: 14,
+    color: theme.colors.text,
+    flex: 1,
+  },
+  timelineInputPlaceholder: {
+    color: theme.colors.mediumGray,
+  },
+  dateTimePickerOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    justifyContent: "flex-end",
+  },
+  dateTimePickerContainer: {
+    backgroundColor: theme.colors.surface,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingBottom: theme.spacing.lg,
+    maxHeight: "70%",
+  },
+  dateTimePickerHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    padding: theme.spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: theme.colors.border,
+  },
+  dateTimePickerTitle: {
+    fontSize: 18,
+    fontWeight: "600",
+    color: theme.colors.text,
+  },
+  dateTimePickerCloseButton: {
+    padding: theme.spacing.xs,
+  },
+  dateTimePickerContent: {
+    padding: theme.spacing.lg,
+  },
+  datePickerSection: {
+    marginBottom: theme.spacing.xl,
+  },
+  dateTimePickerLabel: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: theme.colors.text,
+    marginBottom: theme.spacing.md,
+  },
+  datePickerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: theme.spacing.lg,
+  },
+  datePickerButton: {
+    padding: theme.spacing.sm,
+  },
+  datePickerText: {
+    fontSize: 18,
+    fontWeight: "600",
+    color: theme.colors.text,
+    minWidth: 120,
+    textAlign: "center",
+  },
+  timePickerSection: {
+    marginBottom: theme.spacing.md,
+  },
+  timePickerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: theme.spacing.md,
+  },
+  timePickerColumn: {
+    alignItems: "center",
+  },
+  timePickerLabel: {
+    fontSize: 14,
+    color: theme.colors.mediumGray,
+    marginBottom: theme.spacing.sm,
+  },
+  timePickerControls: {
+    alignItems: "center",
+    gap: theme.spacing.xs,
+  },
+  timePickerButton: {
+    padding: theme.spacing.xs,
+  },
+  timePickerValue: {
+    fontSize: 32,
+    fontWeight: "600",
+    color: theme.colors.text,
+    minWidth: 60,
+    textAlign: "center",
+  },
+  timePickerSeparator: {
+    fontSize: 32,
+    fontWeight: "600",
+    color: theme.colors.text,
+    marginTop: theme.spacing.lg,
+  },
+  dateTimePickerFooter: {
+    flexDirection: "row",
+    gap: theme.spacing.md,
+    paddingHorizontal: theme.spacing.md,
+    paddingTop: theme.spacing.md,
+    borderTopWidth: 1,
+    borderTopColor: theme.colors.border,
+  },
+  dateTimePickerCancelButton: {
+    flex: 1,
+    padding: theme.spacing.md,
+    borderRadius: theme.roundness,
+    backgroundColor: theme.colors.background,
+    alignItems: "center",
+  },
+  dateTimePickerCancelText: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: theme.colors.text,
+  },
+  dateTimePickerConfirmButton: {
+    flex: 1,
+    padding: theme.spacing.md,
+    borderRadius: theme.roundness,
+    backgroundColor: theme.colors.primary,
+    alignItems: "center",
+  },
+  dateTimePickerConfirmText: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#fff",
   },
 });
 
