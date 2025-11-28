@@ -214,12 +214,14 @@ const RestaurantDetailScreen = () => {
           </Text>
         ) : null}
       </View>
-      <TouchableOpacity
-        style={styles.addButton}
-        onPress={() => handleAddToCart(product)}
-      >
-        <Icon name="add" size={20} color={theme.colors.surface} />
-      </TouchableOpacity>
+      {product.available !== false && (
+        <TouchableOpacity
+          style={styles.addButton}
+          onPress={() => handleAddToCart(product)}
+        >
+          <Icon name="add" size={20} color={theme.colors.surface} />
+        </TouchableOpacity>
+      )}
     </View>
   );
 
