@@ -30,6 +30,8 @@ const ProfileScreen = () => {
   const [notifications, setNotifications] = useState<NotificationRecord[]>([]);
   const [loadingNotifications, setLoadingNotifications] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [totalOrders, setTotalOrders] = useState(0);
+  const [totalReviews, setTotalReviews] = useState(0);
   const handleLogout = () => {
     Alert.alert("Đăng xuất", "Bạn có chắc chắn muốn đăng xuất?", [
       { text: "Hủy", style: "cancel" },
@@ -77,12 +79,40 @@ const ProfileScreen = () => {
     }
   }, [user?.id]);
 
+  const fetchOrderStats = useCallback(async () => {
+    if (!user?.id) {
+      setTotalOrders(0);
+      setTotalReviews(0);
+      return;
+    }
+
+    try {
+      const data = await api.getOrdersByUser(user.id);
+      const orders = (Array.isArray(data) ? data : []) as any[];
+
+      // Tổng số đơn hàng mà khách hàng đã đặt
+      setTotalOrders(orders.length);
+
+      // Tổng số lượt đánh giá mà khách hàng đã thực hiện
+      const reviewCount = orders.reduce((sum, order) => {
+        const feedbacks = Array.isArray(order.feedbacks) ? order.feedbacks : [];
+        return sum + feedbacks.length;
+      }, 0);
+
+      setTotalReviews(reviewCount);
+    } catch (error) {
+      console.error("Error fetching order stats:", error);
+    }
+  }, [user?.id]);
+
   const onRefresh = useCallback(() => {
     setRefreshing(true);
-    Promise.all([fetchUserProfile(), fetchNotifications()]).finally(() =>
-      setRefreshing(false)
-    );
-  }, [fetchUserProfile, fetchNotifications]);
+    Promise.all([
+      fetchUserProfile(),
+      fetchNotifications(),
+      fetchOrderStats(),
+    ]).finally(() => setRefreshing(false));
+  }, [fetchUserProfile, fetchNotifications, fetchOrderStats]);
 
   const handleUpdateSuccess = () => {
     fetchUserProfile();
@@ -112,7 +142,8 @@ const ProfileScreen = () => {
   useFocusEffect(
     useCallback(() => {
       fetchNotifications();
-    }, [fetchNotifications])
+      fetchOrderStats();
+    }, [fetchNotifications, fetchOrderStats])
   );
 
   const menuItems = [
@@ -129,21 +160,9 @@ const ProfileScreen = () => {
       onPress: () => setShowAddressModal(true),
     },
     {
-      id: "3",
-      title: "Phương thức thanh toán",
-      icon: "payment",
-      onPress: () => {},
-    },
-    {
       id: "4",
       title: "Mã giảm giá",
       icon: "local-offer",
-      onPress: () => {},
-    },
-    {
-      id: "5",
-      title: "Nhà hàng yêu thích",
-      icon: "favorite",
       onPress: () => {},
     },
     {
@@ -167,8 +186,8 @@ const ProfileScreen = () => {
     },
     {
       id: "9",
-      title: "Về ứng dụng",
-      icon: "info",
+      title: "Trợ giúp & Hỗ trợ",
+      icon: "help",
       onPress: () => {},
     },
   ];
@@ -219,9 +238,6 @@ const ProfileScreen = () => {
               }}
               style={styles.avatar}
             />
-            <TouchableOpacity style={styles.editAvatarButton}>
-              <Icon name="camera-alt" size={16} color={theme.colors.surface} />
-            </TouchableOpacity>
           </View>
           <Text style={styles.userName}>{user?.username || "Người dùng"}</Text>
           <Text style={styles.userEmail}>{user?.email}</Text>
@@ -232,12 +248,12 @@ const ProfileScreen = () => {
       {/* Stats */}
       <View style={styles.statsContainer}>
         <View style={styles.statItem}>
-          <Text style={styles.statNumber}>0</Text>
+          <Text style={styles.statNumber}>{totalOrders}</Text>
           <Text style={styles.statLabel}>Đơn hàng</Text>
         </View>
         <View style={styles.statDivider} />
         <View style={styles.statItem}>
-          <Text style={styles.statNumber}>0</Text>
+          <Text style={styles.statNumber}>{totalReviews}</Text>
           <Text style={styles.statLabel}>Đánh giá</Text>
         </View>
       </View>
