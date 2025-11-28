@@ -18,7 +18,7 @@ import * as ImagePicker from "expo-image-picker";
 
 import { theme } from "../../theme/theme";
 import { useAuth } from "../../context/AuthContext";
-import { api } from "../../services/api";
+import { api, API_BASE_URL } from "../../services/api";
 import { SellerStackParamList } from "../../navigation/SellerNavigator";
 import { StackNavigationProp } from "@react-navigation/stack";
 import CreateRestaurantModal from "../../components/CreateRestaurantModal";
@@ -131,14 +131,24 @@ const SellerProfileScreen: React.FC<Props> = ({ navigation }) => {
     const avg =
       count === 0
         ? 0
-        : restaurants.reduce((sum, item) => sum + (item.rating || 0), 0) /
-          count;
+        : restaurants.reduce(
+            (sum, item) =>
+              sum + (typeof item.rating === "number" ? item.rating : 0),
+            0
+          ) / count;
     return {
       restaurantCount: count,
       averageRating: Number.isFinite(avg) ? avg : 0,
       totalRevenue: 0,
     };
   }, [restaurants]);
+
+  const formatRestaurantRating = (rating?: number) => {
+    if (typeof rating === "number" && !Number.isNaN(rating)) {
+      return rating.toFixed(1);
+    }
+    return "0.0";
+  };
 
   const handleChange = (key: keyof typeof form, value: string) => {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -191,11 +201,8 @@ const SellerProfileScreen: React.FC<Props> = ({ navigation }) => {
         downloadUrl.includes("localhost") ||
         downloadUrl.includes("127.0.0.1")
       ) {
-        const apiBaseUrl =
-          process.env.EXPO_PUBLIC_API_URL?.replace(/\/$/, "") ||
-          "http://192.168.1.9:5000";
         const urlPath = downloadUrl.split("/uploads/")[1];
-        downloadUrl = `${apiBaseUrl}/uploads/${urlPath}`;
+        downloadUrl = `${API_BASE_URL}/uploads/${urlPath}`;
       }
 
       console.log("Avatar URL:", downloadUrl);
@@ -552,7 +559,7 @@ const SellerProfileScreen: React.FC<Props> = ({ navigation }) => {
                 <View style={styles.restaurantStat}>
                   <Icon name="star" size={16} color="#F5A623" />
                   <Text style={styles.restaurantStatText}>
-                    {item.rating ? item.rating.toFixed(1) : "Chưa có"}
+                    {formatRestaurantRating(item.rating)}
                   </Text>
                 </View>
                 <View style={styles.restaurantStat}>
