@@ -255,7 +255,7 @@ const CreateRestaurantModal: React.FC<CreateRestaurantModalProps> = ({
                     {uploadingImage ? (
                       <ActivityIndicator color={theme.colors.primary} />
                     ) : (
-                      <>
+                      <View style={styles.imagePlaceholderContent}>
                         <Icon
                           name="add-photo-alternate"
                           size={32}
@@ -264,7 +264,7 @@ const CreateRestaurantModal: React.FC<CreateRestaurantModalProps> = ({
                         <Text style={styles.imagePlaceholderText}>
                           Chọn ảnh nhà hàng
                         </Text>
-                      </>
+                      </View>
                     )}
                   </View>
                 )}
@@ -493,6 +493,10 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     backgroundColor: theme.colors.background,
+  },
+  imagePlaceholderContent: {
+    justifyContent: "center",
+    alignItems: "center",
   },
   imagePlaceholderText: {
     marginTop: theme.spacing.sm,
