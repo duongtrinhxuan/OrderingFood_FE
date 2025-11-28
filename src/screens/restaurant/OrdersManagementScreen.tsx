@@ -417,8 +417,18 @@ const OrdersManagementScreen: React.FC<
     const addressText = getAddressText(selectedOrder);
     const total =
       (selectedOrder.totalPrice || 0) + (selectedOrder.shippingFee || 0);
-    const paymentMethod =
-      selectedOrder.payments?.[0]?.paymentMethod || "Chưa cập nhật";
+    const latestPayment = selectedOrder.payments?.reduce((latest, current) => {
+      if (!current) return latest;
+      if (!latest) return current;
+      const latestTime = (latest as any).createdAt
+        ? new Date((latest as any).createdAt).getTime()
+        : 0;
+      const currentTime = (current as any).createdAt
+        ? new Date((current as any).createdAt).getTime()
+        : 0;
+      return currentTime > latestTime ? current : latest;
+    }, null as any);
+    const paymentMethod = latestPayment?.paymentMethod || "Chưa cập nhật";
     const discountText = selectedOrder.discount?.code
       ? `${selectedOrder.discount.code}${
           selectedOrder.discount.percent
