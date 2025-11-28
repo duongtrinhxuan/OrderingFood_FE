@@ -16,6 +16,8 @@ import { api } from "../../services/api";
 import { formatDateTime, formatPrice } from "../../utils/helpers";
 import FeedbackModal, { OrderFeedback } from "../../components/FeedbackModal";
 import OrderJourneyModal from "../../components/OrderJourneyModal";
+import EditOrderModal from "../../components/EditOrderModal";
+import { useAuth } from "../../context/AuthContext";
 
 interface OrderDetail {
   id: number;
@@ -76,11 +78,13 @@ const OrderDetailScreen = () => {
   const navigation = useNavigation();
   const route = useRoute();
   const { orderId } = route.params as { orderId: number };
+  const { user } = useAuth();
 
   const [order, setOrder] = useState<Order | null>(null);
   const [loading, setLoading] = useState(true);
   const [feedbackModalVisible, setFeedbackModalVisible] = useState(false);
   const [journeyModalVisible, setJourneyModalVisible] = useState(false);
+  const [editOrderModalVisible, setEditOrderModalVisible] = useState(false);
 
   const loadOrder = useCallback(async () => {
     try {
@@ -170,6 +174,31 @@ const OrderDetailScreen = () => {
     loadOrder();
   };
 
+  const handleCancelOrder = () => {
+    if (!order) return;
+    Alert.alert("Xác nhận hủy đơn", "Bạn có chắc chắn muốn hủy đơn hàng này?", [
+      { text: "Không", style: "cancel" },
+      {
+        text: "Có, hủy đơn",
+        style: "destructive",
+        onPress: async () => {
+          try {
+            await api.updateOrder(order.id, { status: 5 });
+            Alert.alert("Thành công", "Đã hủy đơn hàng.");
+            await loadOrder();
+          } catch (error: any) {
+            Alert.alert("Lỗi", error?.message || "Không thể hủy đơn hàng.");
+          }
+        },
+      },
+    ]);
+  };
+
+  const handleEditOrderSuccess = () => {
+    setEditOrderModalVisible(false);
+    loadOrder();
+  };
+
   const renderStars = (value: number) => {
     return (
       <View style={styles.ratingRow}>
@@ -226,6 +255,28 @@ const OrderDetailScreen = () => {
             Thời gian tạo: {formatDateTime(order.createdAt)}
           </Text>
         </View>
+
+        {/* Action buttons for status 1 */}
+        {order.status === 1 && (
+          <View style={styles.actionButtonsContainer}>
+            <TouchableOpacity
+              style={styles.editOrderButton}
+              onPress={() => setEditOrderModalVisible(true)}
+            >
+              <Icon name="edit" size={18} color={theme.colors.primary} />
+              <Text style={styles.editOrderButtonText}>
+                Chỉnh sửa thông tin đơn hàng
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.cancelOrderButton}
+              onPress={handleCancelOrder}
+            >
+              <Icon name="cancel" size={18} color={theme.colors.error} />
+              <Text style={styles.cancelOrderButtonText}>Hủy đơn hàng</Text>
+            </TouchableOpacity>
+          </View>
+        )}
 
         {order.status === 2 ||
         order.status === 3 ||
@@ -498,6 +549,15 @@ const OrderDetailScreen = () => {
             orderId={order.id}
             canEdit={false}
           />
+          {user && (
+            <EditOrderModal
+              visible={editOrderModalVisible}
+              onClose={() => setEditOrderModalVisible(false)}
+              onSuccess={handleEditOrderSuccess}
+              order={order}
+              userId={user.id}
+            />
+          )}
         </>
       ) : null}
     </View>
@@ -815,6 +875,47 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: "bold",
     color: theme.colors.primary,
+  },
+  actionButtonsContainer: {
+    marginBottom: theme.spacing.md,
+    gap: theme.spacing.sm,
+  },
+  editOrderButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: theme.colors.background,
+    borderRadius: theme.roundness,
+    paddingVertical: theme.spacing.sm,
+    paddingHorizontal: theme.spacing.md,
+    borderWidth: 1,
+    borderColor: theme.colors.primary,
+    marginHorizontal: theme.spacing.md,
+    marginBottom: theme.spacing.sm,
+  },
+  editOrderButtonText: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: theme.colors.primary,
+    marginLeft: theme.spacing.xs,
+  },
+  cancelOrderButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: theme.colors.background,
+    borderRadius: theme.roundness,
+    paddingVertical: theme.spacing.sm,
+    paddingHorizontal: theme.spacing.md,
+    borderWidth: 1,
+    borderColor: theme.colors.error,
+    marginHorizontal: theme.spacing.md,
+  },
+  cancelOrderButtonText: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: theme.colors.error,
+    marginLeft: theme.spacing.xs,
   },
 });
 
