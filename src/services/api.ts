@@ -546,4 +546,31 @@ export const api = {
   ) {
     return request(`/payments/${paymentId}`, "PATCH", payload);
   },
+  // Order Journey APIs
+  getOrderJourneys(orderId: number) {
+    return request(`/order-journeys/order/${orderId}`, "GET");
+  },
+  createOrderJourney(payload: {
+    orderId: number;
+    content?: string;
+    latitude: number;
+    longtitude: number;
+    timeline?: string;
+  }) {
+    return request("/order-journeys", "POST", payload);
+  },
+  updateOrderJourney(
+    id: number,
+    payload: {
+      content?: string;
+      latitude?: number;
+      longtitude?: number;
+      timeline?: string;
+    }
+  ) {
+    return request(`/order-journeys/${id}`, "PATCH", payload);
+  },
+  deleteOrderJourney(id: number) {
+    return request(`/order-journeys/${id}`, "DELETE");
+  },
 };
