@@ -542,6 +542,9 @@ export const api = {
     return request("/order-details", "POST", payload);
   },
   // Payment APIs
+  getPaymentsByOrder(orderId: number) {
+    return request(`/payments/order/${orderId}`, "GET");
+  },
   createPayment(payload: {
     paymentMethod: string;
     status: number;
