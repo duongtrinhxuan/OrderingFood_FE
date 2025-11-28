@@ -1,4 +1,4 @@
-import React from 'react';
+import React from "react";
 import {
   View,
   Text,
@@ -6,9 +6,9 @@ import {
   TouchableOpacity,
   Image,
   ImageBackground,
-} from 'react-native';
-import Icon from 'react-native-vector-icons/MaterialIcons';
-import {theme} from '../theme/theme';
+} from "react-native";
+import Icon from "react-native-vector-icons/MaterialIcons";
+import { theme } from "../theme/theme";
 
 interface RestaurantCardProps {
   restaurant: {
@@ -29,22 +29,26 @@ const RestaurantCard: React.FC<RestaurantCardProps> = ({
   onPress,
 }) => {
   const formatPrice = (price: number) => {
-    return new Intl.NumberFormat('vi-VN', {
-      style: 'currency',
-      currency: 'VND',
+    return new Intl.NumberFormat("vi-VN", {
+      style: "currency",
+      currency: "VND",
     }).format(price);
   };
+
+  const ratingValue =
+    typeof restaurant.rating === "number" ? restaurant.rating : 0;
 
   return (
     <TouchableOpacity style={styles.container} onPress={onPress}>
       <ImageBackground
-        source={{uri: restaurant.image}}
+        source={{ uri: restaurant.image }}
         style={styles.image}
-        imageStyle={styles.imageStyle}>
+        imageStyle={styles.imageStyle}
+      >
         <View style={styles.overlay}>
           <View style={styles.ratingContainer}>
             <Icon name="star" size={16} color={theme.colors.accent} />
-            <Text style={styles.ratingText}>{restaurant.rating}</Text>
+            <Text style={styles.ratingText}>{ratingValue.toFixed(1)}</Text>
           </View>
         </View>
       </ImageBackground>
@@ -69,10 +73,14 @@ const RestaurantCard: React.FC<RestaurantCardProps> = ({
           </View>
 
           <View style={styles.detailItem}>
-            <Icon name="local-shipping" size={16} color={theme.colors.mediumGray} />
+            <Icon
+              name="local-shipping"
+              size={16}
+              color={theme.colors.mediumGray}
+            />
             <Text style={styles.detailText}>
               {restaurant.deliveryFee === 0
-                ? 'Miễn phí'
+                ? "Miễn phí"
                 : formatPrice(restaurant.deliveryFee)}
             </Text>
           </View>
@@ -93,26 +101,26 @@ const styles = StyleSheet.create({
     borderRadius: theme.roundness,
     marginHorizontal: theme.spacing.lg,
     marginBottom: theme.spacing.md,
-    overflow: 'hidden',
+    overflow: "hidden",
     ...theme.shadows.medium,
   },
   image: {
     height: 150,
-    width: '100%',
+    width: "100%",
   },
   imageStyle: {
     borderTopLeftRadius: theme.roundness,
     borderTopRightRadius: theme.roundness,
   },
   overlay: {
-    position: 'absolute',
+    position: "absolute",
     top: theme.spacing.sm,
     right: theme.spacing.sm,
   },
   ratingContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "rgba(0, 0, 0, 0.7)",
     paddingHorizontal: theme.spacing.sm,
     paddingVertical: theme.spacing.xs,
     borderRadius: theme.roundness / 2,
@@ -120,7 +128,7 @@ const styles = StyleSheet.create({
   ratingText: {
     color: theme.colors.surface,
     fontSize: 14,
-    fontWeight: 'bold',
+    fontWeight: "bold",
     marginLeft: theme.spacing.xs,
   },
   content: {
@@ -128,12 +136,12 @@ const styles = StyleSheet.create({
   },
   name: {
     fontSize: 18,
-    fontWeight: 'bold',
+    fontWeight: "bold",
     color: theme.colors.text,
     marginBottom: theme.spacing.sm,
   },
   categoriesContainer: {
-    flexDirection: 'row',
+    flexDirection: "row",
     marginBottom: theme.spacing.sm,
   },
   categoryChip: {
@@ -146,15 +154,15 @@ const styles = StyleSheet.create({
   categoryText: {
     fontSize: 12,
     color: theme.colors.primary,
-    fontWeight: '500',
+    fontWeight: "500",
   },
   detailsContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    justifyContent: "space-between",
   },
   detailItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     flex: 1,
   },
   detailText: {
