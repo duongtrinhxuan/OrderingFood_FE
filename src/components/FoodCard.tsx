@@ -14,9 +14,15 @@ interface FoodCardProps {
   };
   onPress?: () => void;
   onAddToCart?: () => void;
+  available?: boolean;
 }
 
-const FoodCard: React.FC<FoodCardProps> = ({ food, onPress, onAddToCart }) => {
+const FoodCard: React.FC<FoodCardProps> = ({
+  food,
+  onPress,
+  onAddToCart,
+  available = true,
+}) => {
   const formatPrice = (price: number) => {
     return new Intl.NumberFormat("vi-VN", {
       style: "currency",
@@ -44,9 +50,11 @@ const FoodCard: React.FC<FoodCardProps> = ({ food, onPress, onAddToCart }) => {
 
         <View style={styles.footer}>
           <Text style={styles.price}>{formatPrice(food.price)}</Text>
-          <TouchableOpacity style={styles.addButton} onPress={onAddToCart}>
-            <Icon name="add" size={20} color={theme.colors.surface} />
-          </TouchableOpacity>
+          {available !== false && (
+            <TouchableOpacity style={styles.addButton} onPress={onAddToCart}>
+              <Icon name="add" size={20} color={theme.colors.surface} />
+            </TouchableOpacity>
+          )}
         </View>
       </View>
     </TouchableOpacity>
