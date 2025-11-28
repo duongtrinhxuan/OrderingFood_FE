@@ -64,6 +64,7 @@ interface Order {
     id: number;
     paymentMethod?: string;
     status?: number;
+    createdAt?: string;
   }[];
   feedbacks?: {
     id: number;
@@ -124,6 +125,10 @@ const OrdersManagementScreen: React.FC<
   const [updatingStatus, setUpdatingStatus] = useState(false);
   const [detailModalVisible, setDetailModalVisible] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
+  const [paymentModalVisible, setPaymentModalVisible] = useState(false);
+  const [selectedPaymentId, setSelectedPaymentId] = useState<number | null>(
+    null
+  );
 
   useEffect(() => {
     setCurrentRestaurantId(restaurantId ?? routeRestaurantId ?? null);
@@ -250,6 +255,47 @@ const OrdersManagementScreen: React.FC<
     }
   };
 
+  const getOrderPaymentStatusText = (order: Order) => {
+    if (order.status !== 4 || !order.payments?.length) {
+      return null;
+    }
+    const hasPaid = order.payments.some((p) => p && p.status === 2);
+    const allPending = order.payments.every((p) => p && p.status === 1);
+    if (hasPaid) return "Đã thanh toán";
+    if (allPending) return "Chưa thanh toán";
+    return null;
+  };
+
+  const handleOpenPaymentStatusModal = () => {
+    if (!selectedOrder?.payments || selectedOrder.payments.length === 0) {
+      return;
+    }
+    const firstPending = selectedOrder.payments.find(
+      (p) => p && p.status === 1
+    );
+    setSelectedPaymentId(firstPending?.id ?? selectedOrder.payments[0].id);
+    setPaymentModalVisible(true);
+  };
+
+  const handleConfirmPaymentStatus = async () => {
+    if (!selectedOrder || selectedPaymentId == null) {
+      return;
+    }
+    try {
+      const payment = selectedOrder.payments?.find(
+        (p) => p && p.id === selectedPaymentId
+      );
+      if (!payment) {
+        return;
+      }
+      await api.updatePayment(payment.id, { status: 2 });
+      setPaymentModalVisible(false);
+      await loadOrders();
+    } catch (error) {
+      console.error("Error updating payment status:", error);
+    }
+  };
+
   const getStatusColor = (status: string) => {
     switch (status) {
       case "pending":
@@ -307,6 +353,7 @@ const OrdersManagementScreen: React.FC<
   const renderOrder = ({ item }: { item: Order }) => {
     const statusInfo = getStatusInfo(item.status);
     const total = (item.totalPrice || 0) + (item.shippingFee || 0);
+    const paymentStatusText = getOrderPaymentStatusText(item);
 
     return (
       <TouchableOpacity
@@ -379,6 +426,34 @@ const OrdersManagementScreen: React.FC<
             <Text style={styles.updateButtonText}>Cập nhật trạng thái</Text>
           </TouchableOpacity>
         </View>
+
+        {paymentStatusText && (
+          <View style={styles.paymentStatusRow}>
+            <Icon
+              name={
+                paymentStatusText === "Đã thanh toán"
+                  ? "check-circle"
+                  : "payment"
+              }
+              size={16}
+              color={
+                paymentStatusText === "Đã thanh toán"
+                  ? theme.colors.success
+                  : theme.colors.warning
+              }
+            />
+            <Text
+              style={[
+                styles.paymentStatusText,
+                paymentStatusText === "Đã thanh toán"
+                  ? { color: theme.colors.success }
+                  : { color: theme.colors.warning },
+              ]}
+            >
+              {paymentStatusText}
+            </Text>
+          </View>
+        )}
       </TouchableOpacity>
     );
   };
@@ -437,6 +512,7 @@ const OrdersManagementScreen: React.FC<
         }`
       : "Không áp dụng";
     const statusInfo = getStatusInfo(selectedOrder.status);
+    const paymentStatusText = getOrderPaymentStatusText(selectedOrder);
 
     return (
       <Modal
@@ -510,6 +586,37 @@ const OrdersManagementScreen: React.FC<
                   {formatDateTime(selectedOrder.createdAt)}
                 </Text>
               </View>
+              {paymentStatusText && (
+                <TouchableOpacity
+                  style={styles.detailInfoRow}
+                  activeOpacity={0.7}
+                  onPress={handleOpenPaymentStatusModal}
+                >
+                  <Icon
+                    name={
+                      paymentStatusText === "Đã thanh toán"
+                        ? "check-circle"
+                        : "payment"
+                    }
+                    size={16}
+                    color={
+                      paymentStatusText === "Đã thanh toán"
+                        ? theme.colors.success
+                        : theme.colors.warning
+                    }
+                  />
+                  <Text
+                    style={[
+                      styles.detailInfoText,
+                      paymentStatusText === "Đã thanh toán"
+                        ? { color: theme.colors.success }
+                        : { color: theme.colors.warning },
+                    ]}
+                  >
+                    Trạng thái thanh toán: {paymentStatusText}
+                  </Text>
+                </TouchableOpacity>
+              )}
             </View>
 
             <View style={styles.detailSection}>
@@ -624,6 +731,65 @@ const OrdersManagementScreen: React.FC<
       />
 
       {renderOrderDetailModal()}
+
+      {/* Payment status modal */}
+      <Modal
+        visible={paymentModalVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setPaymentModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Chọn giao dịch thanh toán</Text>
+            {selectedOrder?.payments?.map((payment) => (
+              <TouchableOpacity
+                key={payment.id}
+                style={[
+                  styles.statusOption,
+                  selectedPaymentId === payment.id &&
+                    styles.selectedStatusOption,
+                ]}
+                onPress={() => setSelectedPaymentId(payment.id)}
+              >
+                <Text style={styles.paymentMethodText}>
+                  {payment.paymentMethod || "Không rõ phương thức"}
+                </Text>
+                <Text style={styles.paymentMetaText}>
+                  {payment.createdAt
+                    ? formatDateTime(payment.createdAt)
+                    : "Không rõ thời gian"}
+                </Text>
+                <Text style={styles.paymentMetaText}>
+                  Trạng thái:{" "}
+                  {payment.status === 2 ? "Đã thanh toán" : "Chưa thanh toán"}
+                </Text>
+              </TouchableOpacity>
+            ))}
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={styles.modalButton}
+                onPress={() => setPaymentModalVisible(false)}
+              >
+                <Text style={styles.modalButtonText}>Hủy</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.modalConfirmButton]}
+                onPress={handleConfirmPaymentStatus}
+              >
+                <Text
+                  style={[
+                    styles.modalButtonText,
+                    { color: theme.colors.surface },
+                  ]}
+                >
+                  Xác nhận đã thanh toán
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       <Modal
         visible={statusModalVisible}
@@ -904,6 +1070,26 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "bold",
     color: theme.colors.text,
+  },
+  paymentStatusRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: theme.spacing.xs,
+  },
+  paymentStatusText: {
+    marginLeft: theme.spacing.xs,
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  paymentMethodText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: theme.colors.text,
+    marginBottom: theme.spacing.xs,
+  },
+  paymentMetaText: {
+    fontSize: 12,
+    color: theme.colors.mediumGray,
   },
   detailModalScreen: {
     flex: 1,

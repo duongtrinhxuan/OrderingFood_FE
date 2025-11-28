@@ -537,4 +537,13 @@ export const api = {
   }) {
     return request("/payments", "POST", payload);
   },
+  updatePayment(
+    paymentId: number,
+    payload: {
+      paymentMethod?: string;
+      status?: number;
+    }
+  ) {
+    return request(`/payments/${paymentId}`, "PATCH", payload);
+  },
 };
