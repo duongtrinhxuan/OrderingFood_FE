@@ -14,7 +14,7 @@ import {
 import Icon from "react-native-vector-icons/MaterialIcons";
 import * as ImagePicker from "expo-image-picker";
 import { theme } from "../theme/theme";
-import { api } from "../services/api";
+import { api, API_BASE_URL } from "../services/api";
 
 interface CreateRestaurantModalProps {
   visible: boolean;
@@ -86,11 +86,8 @@ const CreateRestaurantModal: React.FC<CreateRestaurantModalProps> = ({
 
       // Sửa URL nếu có localhost
       if (imageUrl.includes("localhost") || imageUrl.includes("127.0.0.1")) {
-        const apiBaseUrl =
-          process.env.EXPO_PUBLIC_API_URL?.replace(/\/$/, "") ||
-          "http://192.168.1.9:5000";
         const urlPath = imageUrl.split("/uploads/")[1];
-        imageUrl = `${apiBaseUrl}/uploads/${urlPath}`;
+        imageUrl = `${API_BASE_URL}/uploads/${urlPath}`;
       }
 
       handleChange("imageUrl", imageUrl);
