@@ -226,7 +226,8 @@ const HomeScreen = () => {
 
   useEffect(() => {
     loadData();
-  }, [loadData]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id]);
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
@@ -414,6 +415,7 @@ const HomeScreen = () => {
         food={foodData}
         onPress={handlePress}
         onAddToCart={() => handleAddToCart(item)}
+        available={item.available !== false}
       />
     );
   };
