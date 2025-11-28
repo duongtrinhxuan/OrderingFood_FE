@@ -15,6 +15,7 @@ interface FoodCardProps {
   onPress?: () => void;
   onAddToCart?: () => void;
   available?: boolean;
+  vertical?: boolean; // true = layout dọc, false = layout ngang
 }
 
 const FoodCard: React.FC<FoodCardProps> = ({
@@ -22,6 +23,7 @@ const FoodCard: React.FC<FoodCardProps> = ({
   onPress,
   onAddToCart,
   available = true,
+  vertical = false,
 }) => {
   const formatPrice = (price: number) => {
     return new Intl.NumberFormat("vi-VN", {
@@ -31,10 +33,20 @@ const FoodCard: React.FC<FoodCardProps> = ({
   };
 
   return (
-    <TouchableOpacity style={styles.container} onPress={onPress}>
-      <Image source={{ uri: food.image }} style={styles.image} />
+    <TouchableOpacity
+      style={[styles.container, vertical && styles.containerVertical]}
+      onPress={onPress}
+    >
+      <View
+        style={[
+          styles.imageContainer,
+          vertical && styles.imageContainerVertical,
+        ]}
+      >
+        <Image source={{ uri: food.image }} style={styles.image} />
+      </View>
 
-      <View style={styles.content}>
+      <View style={[styles.content, vertical && styles.contentVertical]}>
         <Text style={styles.name} numberOfLines={2}>
           {food.name}
         </Text>
@@ -70,12 +82,30 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     ...theme.shadows.medium,
   },
-  image: {
+  containerVertical: {
+    width: "100%",
+    flexDirection: "row",
+    marginRight: 0,
+  },
+  imageContainer: {
     width: "100%",
     height: 120,
   },
+  imageContainerVertical: {
+    width: 120,
+    height: 120,
+  },
+  image: {
+    width: "100%",
+    height: "100%",
+    resizeMode: "cover",
+  },
   content: {
     padding: theme.spacing.md,
+    flex: 1,
+  },
+  contentVertical: {
+    flex: 1,
   },
   name: {
     fontSize: 16,

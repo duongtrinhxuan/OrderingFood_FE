@@ -132,16 +132,25 @@ const SearchScreen = () => {
 
   // Load products
   const loadProducts = useCallback(
-    async (page: number, reset: boolean = false, overrideQuery?: string) => {
+    async (
+      page: number,
+      reset: boolean = false,
+      overrideQuery?: string,
+      overrideCategoryIds?: number[]
+    ) => {
       if (productsLoading) return;
 
       try {
         setProductsLoading(true);
         const query = overrideQuery ?? searchQuery;
+        const categoryIds = overrideCategoryIds ?? filters.categoryIds;
         let allProducts: any[] = [];
 
-        if (query || filters.categoryIds.length > 0) {
-          allProducts = await api.searchProducts(query, filters.categoryIds);
+        if (query || categoryIds.length > 0) {
+          allProducts = await api.searchProducts(
+            query || undefined,
+            categoryIds
+          );
         } else {
           allProducts = await api.getAllProducts(page, 5);
         }
@@ -170,18 +179,24 @@ const SearchScreen = () => {
 
   // Load restaurants
   const loadRestaurants = useCallback(
-    async (page: number, reset: boolean = false, overrideQuery?: string) => {
+    async (
+      page: number,
+      reset: boolean = false,
+      overrideQuery?: string,
+      overrideCategoryIds?: number[]
+    ) => {
       if (restaurantsLoading) return;
 
       try {
         setRestaurantsLoading(true);
         const query = overrideQuery ?? searchQuery;
+        const categoryIds = overrideCategoryIds ?? filters.categoryIds;
         let allRestaurants: any[] = [];
 
-        if (query || filters.categoryIds.length > 0) {
+        if (query || categoryIds.length > 0) {
           allRestaurants = await api.searchRestaurants(
-            query,
-            filters.categoryIds
+            query || undefined,
+            categoryIds
           );
         } else {
           allRestaurants = await api.getAllRestaurants(page, 5);
@@ -244,11 +259,30 @@ const SearchScreen = () => {
   useEffect(() => {
     setProductsPage(1);
     setRestaurantsPage(1);
-    loadProducts(1, true, filters.query);
-    if (selectedFilter === "all" || selectedFilter === "restaurant") {
-      loadRestaurants(1, true, filters.query);
+    // Truyền cả query và categoryIds để đảm bảo search đúng
+    // Chỉ load products nếu selectedFilter là "all" hoặc "product", hoặc filters.type là "product"
+    if (
+      selectedFilter === "all" ||
+      selectedFilter === "product" ||
+      filters.type === "product"
+    ) {
+      loadProducts(1, true, filters.query, filters.categoryIds);
     }
-  }, [filters, selectedFilter, loadProducts, loadRestaurants]);
+    // Chỉ load restaurants nếu selectedFilter là "all" hoặc "restaurant", hoặc filters.type là "restaurant"
+    if (
+      selectedFilter === "all" ||
+      selectedFilter === "restaurant" ||
+      filters.type === "restaurant"
+    ) {
+      loadRestaurants(1, true, filters.query, filters.categoryIds);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    filters.query,
+    filters.type,
+    filters.categoryIds.join(","),
+    selectedFilter,
+  ]);
 
   const handleSearch = () => {
     setSearchQuery((prev) => prev.trim());
@@ -258,22 +292,39 @@ const SearchScreen = () => {
     if (typeof newFilters.query === "string") {
       setSearchQuery(newFilters.query);
     }
+    // Cập nhật selectedFilter dựa trên type trước
     if (newFilters.type) {
       setSelectedFilter(newFilters.type);
     }
-    setFilters((prev) => ({
-      ...prev,
-      query: newFilters.query ?? prev.query,
-      type: newFilters.type,
-      categoryIds: newFilters.categoryIds || [],
-    }));
+    // Cập nhật filters sau để trigger useEffect
+    // Chỉ update nếu có thay đổi thực sự để tránh vòng lặp
+    setFilters((prev) => {
+      const categoryIdsChanged =
+        prev.categoryIds.length !== newFilters.categoryIds.length ||
+        !prev.categoryIds.every(
+          (id, idx) => id === newFilters.categoryIds[idx]
+        );
+
+      if (
+        prev.query === newFilters.query &&
+        prev.type === newFilters.type &&
+        !categoryIdsChanged
+      ) {
+        return prev; // Không có thay đổi, giữ nguyên để tránh re-render
+      }
+      return {
+        query: newFilters.query ?? prev.query,
+        type: newFilters.type,
+        categoryIds: newFilters.categoryIds || [],
+      };
+    });
   };
 
   const handleLoadMoreProducts = () => {
     if (productsHasMore && !productsLoading) {
       const nextPage = productsPage + 1;
       setProductsPage(nextPage);
-      loadProducts(nextPage, false, filters.query);
+      loadProducts(nextPage, false, filters.query, filters.categoryIds);
     }
   };
 
@@ -281,7 +332,7 @@ const SearchScreen = () => {
     if (restaurantsHasMore && !restaurantsLoading) {
       const nextPage = restaurantsPage + 1;
       setRestaurantsPage(nextPage);
-      loadRestaurants(nextPage, false, filters.query);
+      loadRestaurants(nextPage, false, filters.query, filters.categoryIds);
     }
   };
 
@@ -536,33 +587,74 @@ const SearchScreen = () => {
         {(selectedFilter === "all" || selectedFilter === "product") && (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Món ăn</Text>
-            <FlatList
-              data={products}
-              renderItem={renderProduct}
-              keyExtractor={(item) => `product-${item.id}`}
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.productList}
-              onEndReached={handleLoadMoreProducts}
-              onEndReachedThreshold={0.5}
-              ListFooterComponent={
-                productsLoading ? (
-                  <View style={styles.loadingContainer}>
-                    <ActivityIndicator
-                      size="small"
-                      color={theme.colors.primary}
-                    />
-                  </View>
-                ) : null
-              }
-              ListEmptyComponent={
-                !productsLoading ? (
+            {selectedFilter === "all" ? (
+              // Hiển thị ngang khi filter là "Tất cả"
+              <FlatList
+                data={products}
+                renderItem={renderProduct}
+                keyExtractor={(item) => `product-${item.id}`}
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.productList}
+                onEndReached={handleLoadMoreProducts}
+                onEndReachedThreshold={0.5}
+                ListFooterComponent={
+                  productsLoading ? (
+                    <View style={styles.loadingContainer}>
+                      <ActivityIndicator
+                        size="small"
+                        color={theme.colors.primary}
+                      />
+                    </View>
+                  ) : null
+                }
+                ListEmptyComponent={
+                  !productsLoading ? (
+                    <View style={styles.emptyContainer}>
+                      <Text style={styles.emptyText}>
+                        Không tìm thấy món ăn
+                      </Text>
+                    </View>
+                  ) : null
+                }
+              />
+            ) : (
+              // Hiển thị dọc khi filter là "Món ăn"
+              <>
+                {products.length === 0 && !productsLoading ? (
                   <View style={styles.emptyContainer}>
                     <Text style={styles.emptyText}>Không tìm thấy món ăn</Text>
                   </View>
-                ) : null
-              }
-            />
+                ) : (
+                  <>
+                    {products.map((item) => (
+                      <View
+                        key={`product-${item.id}`}
+                        style={styles.productItem}
+                      >
+                        {renderProduct({ item })}
+                      </View>
+                    ))}
+                    {productsLoading && (
+                      <View style={styles.loadingContainer}>
+                        <ActivityIndicator
+                          size="small"
+                          color={theme.colors.primary}
+                        />
+                      </View>
+                    )}
+                    {productsHasMore && !productsLoading && (
+                      <TouchableOpacity
+                        style={styles.loadMoreButton}
+                        onPress={handleLoadMoreProducts}
+                      >
+                        <Text style={styles.loadMoreText}>Xem thêm</Text>
+                      </TouchableOpacity>
+                    )}
+                  </>
+                )}
+              </>
+            )}
           </View>
         )}
 
@@ -690,8 +782,22 @@ const styles = StyleSheet.create({
     paddingHorizontal: theme.spacing.lg,
     marginBottom: theme.spacing.md,
   },
-  productList: {
+  productItem: {
+    marginBottom: theme.spacing.md,
     paddingHorizontal: theme.spacing.lg,
+  },
+  loadMoreButton: {
+    padding: theme.spacing.md,
+    alignItems: "center",
+    backgroundColor: theme.colors.background,
+    borderRadius: theme.roundness,
+    marginTop: theme.spacing.sm,
+    marginHorizontal: theme.spacing.lg,
+  },
+  loadMoreText: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: theme.colors.primary,
   },
   loadingContainer: {
     padding: theme.spacing.md,
