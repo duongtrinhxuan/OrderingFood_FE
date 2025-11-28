@@ -387,6 +387,7 @@ const SearchScreen = () => {
         food={foodData}
         onPress={handlePress}
         onAddToCart={() => handleAddToCart(item)}
+        available={item.available !== false}
       />
     );
   };
