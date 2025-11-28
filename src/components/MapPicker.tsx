@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   View,
   Text,
@@ -61,9 +61,14 @@ const MapPicker: React.FC<MapPickerProps> = ({
         getCurrentLocation();
       }
     }
-  }, [visible, initialLocation]);
+  }, [
+    visible,
+    initialLocation?.latitude,
+    initialLocation?.longitude,
+    getCurrentLocation,
+  ]);
 
-  const getCurrentLocation = async () => {
+  const getCurrentLocation = useCallback(async () => {
     const { status } = await Location.requestForegroundPermissionsAsync();
     if (status !== "granted") {
       Alert.alert(
@@ -92,7 +97,7 @@ const MapPicker: React.FC<MapPickerProps> = ({
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   const handleMapPress = (event: any) => {
     const { latitude, longitude } = event.nativeEvent.coordinate;
