@@ -15,6 +15,7 @@ import { theme } from "../../theme/theme";
 import { api } from "../../services/api";
 import { formatDateTime, formatPrice } from "../../utils/helpers";
 import FeedbackModal, { OrderFeedback } from "../../components/FeedbackModal";
+import OrderJourneyModal from "../../components/OrderJourneyModal";
 
 interface OrderDetail {
   id: number;
@@ -79,6 +80,7 @@ const OrderDetailScreen = () => {
   const [order, setOrder] = useState<Order | null>(null);
   const [loading, setLoading] = useState(true);
   const [feedbackModalVisible, setFeedbackModalVisible] = useState(false);
+  const [journeyModalVisible, setJourneyModalVisible] = useState(false);
 
   const loadOrder = useCallback(async () => {
     try {
@@ -224,6 +226,19 @@ const OrderDetailScreen = () => {
             Thời gian tạo: {formatDateTime(order.createdAt)}
           </Text>
         </View>
+
+        {order.status === 2 ||
+        order.status === 3 ||
+        order.status === 4 ||
+        order.status === 5 ? (
+          <TouchableOpacity
+            style={styles.trackButton}
+            onPress={() => setJourneyModalVisible(true)}
+          >
+            <Icon name="timeline" size={18} color={theme.colors.primary} />
+            <Text style={styles.trackButtonText}>Theo dõi hành trình đơn</Text>
+          </TouchableOpacity>
+        ) : null}
 
         {order.status === 4 ? (
           <TouchableOpacity
@@ -462,20 +477,28 @@ const OrderDetailScreen = () => {
       </ScrollView>
 
       {order ? (
-        <FeedbackModal
-          visible={feedbackModalVisible}
-          onClose={() => setFeedbackModalVisible(false)}
-          onSuccess={handleFeedbackSuccess}
-          orderId={order.id}
-          orderName={order.restaurant?.name}
-          orderItemsSummary={order.orderDetails
-            ?.map(
-              (detail) =>
-                `${detail.product?.name || "Món ăn"} x${detail.quantity || 0}`
-            )
-            .join(", ")}
-          existingFeedback={existingFeedback}
-        />
+        <>
+          <FeedbackModal
+            visible={feedbackModalVisible}
+            onClose={() => setFeedbackModalVisible(false)}
+            onSuccess={handleFeedbackSuccess}
+            orderId={order.id}
+            orderName={order.restaurant?.name}
+            orderItemsSummary={order.orderDetails
+              ?.map(
+                (detail) =>
+                  `${detail.product?.name || "Món ăn"} x${detail.quantity || 0}`
+              )
+              .join(", ")}
+            existingFeedback={existingFeedback}
+          />
+          <OrderJourneyModal
+            visible={journeyModalVisible}
+            onClose={() => setJourneyModalVisible(false)}
+            orderId={order.id}
+            canEdit={false}
+          />
+        </>
       ) : null}
     </View>
   );
@@ -539,6 +562,25 @@ const styles = StyleSheet.create({
   reviewCtaText: {
     fontSize: 16,
     fontWeight: "600",
+    marginLeft: theme.spacing.xs,
+  },
+  trackButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: theme.colors.background,
+    borderRadius: theme.roundness,
+    paddingVertical: theme.spacing.sm,
+    paddingHorizontal: theme.spacing.md,
+    marginHorizontal: theme.spacing.md,
+    marginBottom: theme.spacing.md,
+    borderWidth: 1,
+    borderColor: theme.colors.primary,
+  },
+  trackButtonText: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: theme.colors.primary,
     marginLeft: theme.spacing.xs,
   },
   feedbackCard: {
