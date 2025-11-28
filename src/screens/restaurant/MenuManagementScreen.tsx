@@ -16,7 +16,7 @@ import {
 import Icon from "react-native-vector-icons/MaterialIcons";
 import * as ImagePicker from "expo-image-picker";
 import { theme } from "../../theme/theme";
-import { api } from "../../services/api";
+import { api, API_BASE_URL } from "../../services/api";
 
 interface MenuManagementScreenProps {
   restaurantId: number;
@@ -58,9 +58,12 @@ const MenuManagementScreen: React.FC<MenuManagementScreenProps> = ({
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [showMenuModal, setShowMenuModal] = useState(false);
+  const [showManageMenuModal, setShowManageMenuModal] = useState(false);
   const [showProductModal, setShowProductModal] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [uploadingImage, setUploadingImage] = useState(false);
+  const [editingMenuId, setEditingMenuId] = useState<number | null>(null);
+  const [editingMenuName, setEditingMenuName] = useState("");
 
   // Form states
   const [menuForm, setMenuForm] = useState({ name: "" });
@@ -152,6 +155,48 @@ const MenuManagementScreen: React.FC<MenuManagementScreenProps> = ({
     }
   };
 
+  const handleStartEditMenu = (menu: Menu) => {
+    setEditingMenuId(menu.id);
+    setEditingMenuName(menu.name);
+  };
+
+  const handleSaveMenuName = async () => {
+    if (!editingMenuId) return;
+    const trimmedName = editingMenuName.trim();
+    if (!trimmedName) {
+      Alert.alert("Lỗi", "Vui lòng nhập tên menu.");
+      return;
+    }
+    try {
+      await api.updateMenu(editingMenuId, { name: trimmedName });
+      setEditingMenuId(null);
+      setEditingMenuName("");
+      await fetchMenus();
+      Alert.alert("Thành công", "Đã cập nhật tên menu.");
+    } catch (error: any) {
+      Alert.alert("Lỗi", error?.message || "Không thể cập nhật menu.");
+    }
+  };
+
+  const handleDeactivateMenu = (menu: Menu) => {
+    Alert.alert("Ẩn menu", "Bạn có chắc chắn muốn ẩn menu này?", [
+      { text: "Hủy", style: "cancel" },
+      {
+        text: "Xác nhận",
+        style: "destructive",
+        onPress: async () => {
+          try {
+            await api.updateMenu(menu.id, { isActive: false });
+            await fetchMenus();
+            Alert.alert("Thành công", "Menu đã được ẩn.");
+          } catch (error: any) {
+            Alert.alert("Lỗi", error?.message || "Không thể cập nhật menu.");
+          }
+        },
+      },
+    ]);
+  };
+
   // Product handlers
   const handlePickImage = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -179,11 +224,8 @@ const MenuManagementScreen: React.FC<MenuManagementScreenProps> = ({
       let imageUrl = uploadResult.url;
 
       if (imageUrl.includes("localhost") || imageUrl.includes("127.0.0.1")) {
-        const apiBaseUrl =
-          process.env.EXPO_PUBLIC_API_URL?.replace(/\/$/, "") ||
-          "http://192.168.1.9:5000";
         const urlPath = imageUrl.split("/uploads/")[1];
-        imageUrl = `${apiBaseUrl}/uploads/${urlPath}`;
+        imageUrl = `${API_BASE_URL}/uploads/${urlPath}`;
       }
 
       setProductForm({ ...productForm, imageUrl });
@@ -473,6 +515,13 @@ const MenuManagementScreen: React.FC<MenuManagementScreenProps> = ({
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.menusScroll}
         />
+        <TouchableOpacity
+          style={styles.manageMenuButton}
+          onPress={() => setShowManageMenuModal(true)}
+        >
+          <Icon name="settings" size={18} color={theme.colors.primary} />
+          <Text style={styles.manageMenuButtonText}>Quản lý menu</Text>
+        </TouchableOpacity>
       </View>
 
       {/* Products List */}
@@ -500,36 +549,119 @@ const MenuManagementScreen: React.FC<MenuManagementScreenProps> = ({
         }
       />
 
+      {/* Manage Menu Modal */}
+      <Modal
+        visible={showManageMenuModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => {
+          setShowManageMenuModal(false);
+          setEditingMenuId(null);
+          setEditingMenuName("");
+        }}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.manageMenuModal}>
+            <View style={styles.manageMenuHeader}>
+              <Text style={styles.modalTitle}>Quản lý menu</Text>
+              <TouchableOpacity
+                onPress={() => {
+                  setShowManageMenuModal(false);
+                  setShowMenuModal(true);
+                }}
+              >
+                <Icon name="add" size={24} color={theme.colors.primary} />
+              </TouchableOpacity>
+            </View>
+            <ScrollView style={styles.manageMenuList}>
+              {menus.map((menu) => (
+                <View key={menu.id} style={styles.manageMenuItem}>
+                  <View style={styles.manageMenuInfo}>
+                    <Text style={styles.manageMenuName}>{menu.name}</Text>
+                    <Text style={styles.manageMenuStatus}>
+                      {menu.isActive ? "Đang hoạt động" : "Đã ẩn"}
+                    </Text>
+                  </View>
+                  <View style={styles.manageMenuActions}>
+                    <TouchableOpacity
+                      style={styles.actionButton}
+                      onPress={() => handleStartEditMenu(menu)}
+                    >
+                      <Icon
+                        name="edit"
+                        size={20}
+                        color={theme.colors.primary}
+                      />
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={styles.actionButton}
+                      onPress={() => handleDeactivateMenu(menu)}
+                    >
+                      <Icon
+                        name="delete"
+                        size={20}
+                        color={theme.colors.error}
+                      />
+                    </TouchableOpacity>
+                  </View>
+                  {editingMenuId === menu.id && (
+                    <View style={styles.editMenuRow}>
+                      <TextInput
+                        style={styles.input}
+                        value={editingMenuName}
+                        onChangeText={setEditingMenuName}
+                        placeholder="Nhập tên menu"
+                      />
+                      <TouchableOpacity
+                        style={styles.submitButton}
+                        onPress={handleSaveMenuName}
+                      >
+                        <Text style={styles.submitButtonText}>Lưu</Text>
+                      </TouchableOpacity>
+                    </View>
+                  )}
+                </View>
+              ))}
+            </ScrollView>
+            <TouchableOpacity
+              style={[styles.submitButton, { marginTop: theme.spacing.md }]}
+              onPress={() => setShowManageMenuModal(false)}
+            >
+              <Text style={styles.submitButtonText}>Đóng</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
       {/* Create Menu Modal */}
       <Modal
         visible={showMenuModal}
         animationType="slide"
-        transparent={true}
+        presentationStyle="pageSheet"
         onRequestClose={() => setShowMenuModal(false)}
       >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Thêm menu mới</Text>
-              <TouchableOpacity onPress={() => setShowMenuModal(false)}>
-                <Icon name="close" size={24} color={theme.colors.text} />
-              </TouchableOpacity>
-            </View>
-            <View style={styles.modalBody}>
-              <Text style={styles.label}>Tên menu *</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="Nhập tên menu"
-                value={menuForm.name}
-                onChangeText={(text) => setMenuForm({ name: text })}
-              />
-              <TouchableOpacity
-                style={styles.submitButton}
-                onPress={handleCreateMenu}
-              >
-                <Text style={styles.submitButtonText}>Xác nhận</Text>
-              </TouchableOpacity>
-            </View>
+        <View style={styles.modalContainer}>
+          <View style={styles.modalHeader}>
+            <TouchableOpacity onPress={() => setShowMenuModal(false)}>
+              <Text style={styles.cancelText}>Hủy</Text>
+            </TouchableOpacity>
+            <Text style={styles.modalTitle}>Thêm menu mới</Text>
+            <TouchableOpacity onPress={handleCreateMenu}>
+              <Text style={styles.saveText}>Lưu</Text>
+            </TouchableOpacity>
+          </View>
+          <View style={styles.menuFormBody}>
+            <Text style={styles.label}>Tên menu *</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="Nhập tên menu"
+              value={menuForm.name}
+              onChangeText={(text) => setMenuForm({ name: text })}
+            />
+            <Text style={styles.menuFormHint}>
+              Tên menu giúp bạn nhóm các món ăn theo chủ đề (ví dụ: Món chính,
+              Đồ uống, Combo…)
+            </Text>
           </View>
         </View>
       </Modal>
@@ -810,6 +942,19 @@ const styles = StyleSheet.create({
     fontWeight: "500",
     color: theme.colors.primary,
   },
+  manageMenuButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing.xs,
+    marginTop: theme.spacing.sm,
+    alignSelf: "flex-start",
+    marginLeft: theme.spacing.lg,
+  },
+  manageMenuButtonText: {
+    fontSize: 14,
+    color: theme.colors.primary,
+    fontWeight: "500",
+  },
   productsList: {
     padding: theme.spacing.lg,
   },
@@ -907,6 +1052,48 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
+  manageMenuModal: {
+    backgroundColor: theme.colors.surface,
+    borderRadius: theme.roundness * 2,
+    padding: theme.spacing.lg,
+    width: "90%",
+    maxHeight: "80%",
+  },
+  manageMenuHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: theme.spacing.md,
+  },
+  manageMenuList: {
+    maxHeight: "70%",
+  },
+  manageMenuItem: {
+    paddingVertical: theme.spacing.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: theme.colors.border,
+  },
+  manageMenuInfo: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  manageMenuName: {
+    fontSize: 16,
+    fontWeight: "bold",
+    color: theme.colors.text,
+  },
+  manageMenuStatus: {
+    fontSize: 12,
+    color: theme.colors.mediumGray,
+  },
+  manageMenuActions: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+  },
+  editMenuRow: {
+    marginTop: theme.spacing.sm,
+  },
   modalContent: {
     backgroundColor: theme.colors.surface,
     borderRadius: theme.roundness * 2,
@@ -931,6 +1118,17 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: "bold",
     color: theme.colors.text,
+  },
+  menuFormBody: {
+    flex: 1,
+    padding: theme.spacing.lg,
+    backgroundColor: theme.colors.background,
+  },
+  menuFormHint: {
+    fontSize: 14,
+    color: theme.colors.mediumGray,
+    marginTop: theme.spacing.sm,
+    lineHeight: 20,
   },
   cancelText: {
     fontSize: 16,
