@@ -1,80 +1,147 @@
-import React, { useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
   View,
   Text,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
+  ActivityIndicator,
+  Alert,
+  Image,
 } from "react-native";
 import Icon from "react-native-vector-icons/MaterialIcons";
 import { LinearGradient } from "expo-linear-gradient";
+import { useRoute } from "@react-navigation/native";
+import { useAuth } from "../../context/AuthContext";
+import { api } from "../../services/api";
 import { theme } from "../../theme/theme";
 
+type PeriodKey = "today" | "week" | "month" | "year";
+
+type RevenueSummary = {
+  period: PeriodKey;
+  comparisonLabel: string;
+  totalRevenue: number;
+  totalOrders: number;
+  averageOrderValue: number;
+  growthRate: number;
+  chart: { label: string; revenue: number }[];
+  topProducts: {
+    productId: number;
+    name: string;
+    quantity: number;
+    revenue: number;
+    imageUrl?: string | null;
+  }[];
+  menuRevenue: {
+    menuId: number | null;
+    menuName: string;
+    revenue: number;
+  }[];
+};
+
+const PERIODS: { key: PeriodKey; label: string }[] = [
+  { key: "today", label: "Hôm nay" },
+  { key: "week", label: "Tuần này" },
+  { key: "month", label: "Tháng này" },
+  { key: "year", label: "Năm nay" },
+];
+
 const RevenueScreen = () => {
-  const [selectedPeriod, setSelectedPeriod] = useState("today");
+  const route = useRoute<any>();
+  const { user } = useAuth();
+  const routeRestaurantId = route?.params?.restaurantId;
 
-  const periods = [
-    { key: "today", label: "Hôm nay" },
-    { key: "week", label: "Tuần này" },
-    { key: "month", label: "Tháng này" },
-    { key: "year", label: "Năm nay" },
-  ];
+  const [selectedPeriod, setSelectedPeriod] = useState<PeriodKey>("today");
+  const [restaurantId, setRestaurantId] = useState<number | null>(
+    routeRestaurantId ?? null
+  );
+  const [summary, setSummary] = useState<RevenueSummary | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [fetchingRestaurant, setFetchingRestaurant] = useState(false);
 
-  const revenueData = {
-    today: {
-      totalRevenue: 2500000,
-      totalOrders: 24,
-      averageOrder: 104167,
-      growth: 12,
-    },
-    week: {
-      totalRevenue: 15000000,
-      totalOrders: 156,
-      averageOrder: 96154,
-      growth: 8,
-    },
-    month: {
-      totalRevenue: 65000000,
-      totalOrders: 678,
-      averageOrder: 95870,
-      growth: 15,
-    },
-    year: {
-      totalRevenue: 780000000,
-      totalOrders: 8124,
-      averageOrder: 96012,
-      growth: 22,
-    },
-  };
+  useEffect(() => {
+    setRestaurantId(routeRestaurantId ?? null);
+  }, [routeRestaurantId]);
 
-  const topSellingItems = [
-    { name: "Pizza Margherita", sales: 45, revenue: 11250000 },
-    { name: "Chicken Burger", sales: 38, revenue: 3382000 },
-    { name: "Big Mac", sales: 32, revenue: 2400000 },
-    { name: "Coca Cola", sales: 28, revenue: 420000 },
-    { name: "French Fries", sales: 25, revenue: 1250000 },
-  ];
+  const fetchRestaurant = useCallback(async () => {
+    if (routeRestaurantId || !user?.id) return;
+    try {
+      setFetchingRestaurant(true);
+      const data = await api.getRestaurantsByOwner(user.id);
+      const restaurants = (data as any[]) || [];
+      if (restaurants.length > 0) {
+        setRestaurantId(restaurants[0].id);
+      } else {
+        setRestaurantId(null);
+      }
+    } catch (error) {
+      console.error("Error fetching restaurant:", error);
+      setRestaurantId(null);
+    } finally {
+      setFetchingRestaurant(false);
+    }
+  }, [routeRestaurantId, user?.id]);
 
-  const dailyRevenue = [
-    { day: "T2", revenue: 1200000 },
-    { day: "T3", revenue: 1800000 },
-    { day: "T4", revenue: 2200000 },
-    { day: "T5", revenue: 1900000 },
-    { day: "T6", revenue: 2500000 },
-    { day: "T7", revenue: 2800000 },
-    { day: "CN", revenue: 2100000 },
-  ];
+  useEffect(() => {
+    if (!routeRestaurantId) {
+      fetchRestaurant();
+    }
+  }, [fetchRestaurant, routeRestaurantId]);
+
+  const fetchSummary = useCallback(async () => {
+    if (!restaurantId) {
+      setSummary(null);
+      return;
+    }
+    try {
+      setLoading(true);
+      const data = await api.getRestaurantRevenueSummary(
+        restaurantId,
+        selectedPeriod
+      );
+      setSummary(data as RevenueSummary);
+    } catch (error: any) {
+      console.error("Error loading revenue summary:", error);
+      Alert.alert(
+        "Lỗi",
+        error?.message || "Không thể tải dữ liệu doanh thu. Vui lòng thử lại."
+      );
+      setSummary(null);
+    } finally {
+      setLoading(false);
+    }
+  }, [restaurantId, selectedPeriod]);
+
+  useEffect(() => {
+    fetchSummary();
+  }, [fetchSummary]);
 
   const formatPrice = (price: number) => {
     return new Intl.NumberFormat("vi-VN", {
       style: "currency",
       currency: "VND",
+      minimumFractionDigits: 0,
     }).format(price);
   };
 
-  const currentData = revenueData[selectedPeriod as keyof typeof revenueData];
+  const safeTopProducts = summary?.topProducts ?? [];
+  const safeMenuRevenue = summary?.menuRevenue ?? [];
+  console.log(
+    "Period:",
+    selectedPeriod,
+    "Top len:",
+    safeTopProducts.length,
+    "Menu len:",
+    safeMenuRevenue.length
+  );
 
-  const renderPeriodFilter = (period: any) => (
+  const growthColor =
+    (summary?.growthRate || 0) >= 0 ? theme.colors.success : theme.colors.error;
+  const growthIcon =
+    (summary?.growthRate || 0) >= 0 ? "trending-up" : "trending-down";
+
+  const renderPeriodFilter = (period: (typeof PERIODS)[number]) => (
     <TouchableOpacity
       key={period.key}
       style={[
@@ -94,136 +161,207 @@ const RevenueScreen = () => {
     </TouchableOpacity>
   );
 
-  const renderTopSellingItem = (item: any, index: number) => (
-    <View key={index} style={styles.topItemCard}>
-      <View style={styles.itemRank}>
-        <Text style={styles.rankText}>#{index + 1}</Text>
+  const renderChart = () => {
+    if (!summary || !summary.chart || summary.chart.length === 0) {
+      return (
+        <Text style={styles.emptyHint}>
+          Chưa có dữ liệu doanh thu theo ngày cho giai đoạn này.
+        </Text>
+      );
+    }
+
+    const maxRevenue = Math.max(...summary.chart.map((c) => c.revenue), 1);
+
+    return (
+      <View style={styles.dailyRevenueGrid}>
+        {summary.chart.map((item) => (
+          <View key={item.label} style={styles.dailyItem}>
+            <Text style={styles.dayText}>{item.label}</Text>
+            <View style={styles.barContainer}>
+              <View
+                style={[
+                  styles.revenueBar,
+                  {
+                    height: (item.revenue / maxRevenue) * 120 || 2,
+                    backgroundColor: theme.colors.primary,
+                  },
+                ]}
+              />
+            </View>
+            <Text style={styles.dailyRevenueText}>
+              {formatPrice(item.revenue)}
+            </Text>
+          </View>
+        ))}
       </View>
-      <View style={styles.itemInfo}>
-        <Text style={styles.itemName}>{item.name}</Text>
-        <Text style={styles.itemSales}>{item.sales} đơn</Text>
+    );
+  };
+
+  const renderTopProduct = (
+    product: RevenueSummary["topProducts"][number],
+    index: number
+  ) => {
+    const fallbackImage =
+      "https://images.unsplash.com/photo-1504674900247-0877df9cc836?fit=crop&w=200&q=60";
+    return (
+      <View key={product.productId} style={styles.topItemCard}>
+        <View style={styles.itemRank}>
+          <Text style={styles.rankText}>#{index + 1}</Text>
+        </View>
+        <Image
+          source={{ uri: product.imageUrl || fallbackImage }}
+          style={styles.itemImage}
+        />
+        <View style={styles.itemInfo}>
+          <Text style={styles.itemName}>{product.name}</Text>
+          <Text style={styles.itemSales}>{product.quantity} món</Text>
+        </View>
+        <View style={styles.itemMeta}>
+          <Text style={styles.itemRevenue}>{formatPrice(product.revenue)}</Text>
+        </View>
       </View>
-      <Text style={styles.itemRevenue}>{formatPrice(item.revenue)}</Text>
+    );
+  };
+
+  const renderMenuRevenue = (
+    menu: RevenueSummary["menuRevenue"][number],
+    index: number
+  ) => (
+    <View key={`${menu.menuId}-${index}`} style={styles.breakdownItem}>
+      <View style={styles.breakdownIcon}>
+        <Icon name="restaurant-menu" size={20} color={theme.colors.primary} />
+      </View>
+      <View style={styles.breakdownContent}>
+        <Text style={styles.breakdownTitle}>{menu.menuName}</Text>
+        <Text style={styles.breakdownValue}>{formatPrice(menu.revenue)}</Text>
+      </View>
     </View>
   );
 
-  const renderDailyRevenue = (day: any, index: number) => (
-    <View key={index} style={styles.dailyItem}>
-      <Text style={styles.dayText}>{day.day}</Text>
-      <View style={styles.barContainer}>
-        <View
-          style={[
-            styles.revenueBar,
-            {
-              height: (day.revenue / 3000000) * 100,
-              backgroundColor: theme.colors.primary,
-            },
-          ]}
-        />
+  if (fetchingRestaurant) {
+    return (
+      <View style={styles.centeredContainer}>
+        <ActivityIndicator size="large" color={theme.colors.primary} />
       </View>
-      <Text style={styles.dailyRevenueText}>
-        {formatPrice(day.revenue).replace("₫", "K")}
-      </Text>
-    </View>
-  );
+    );
+  }
+
+  if (!restaurantId) {
+    return (
+      <View style={styles.centeredContainer}>
+        <Text style={styles.emptyHint}>
+          Bạn chưa có nhà hàng nào để xem báo cáo.
+        </Text>
+      </View>
+    );
+  }
 
   return (
-    <ScrollView style={styles.container}>
-      {/* Period Filters */}
+    <ScrollView
+      style={styles.container}
+      contentContainerStyle={styles.contentContainer}
+    >
       <View style={styles.filtersContainer}>
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.filtersScroll}
         >
-          {periods.map(renderPeriodFilter)}
+          {PERIODS.map(renderPeriodFilter)}
         </ScrollView>
       </View>
 
-      {/* Revenue Overview */}
-      <View style={styles.overviewContainer}>
-        <LinearGradient
-          colors={[theme.colors.primary, theme.colors.secondary]}
-          style={styles.overviewCard}
-        >
-          <View style={styles.overviewHeader}>
-            <Text style={styles.overviewTitle}>Tổng doanh thu</Text>
-            <View style={styles.growthContainer}>
-              <Icon name="trending-up" size={16} color={theme.colors.surface} />
-              <Text style={styles.growthText}>+{currentData.growth}%</Text>
+      {loading ? (
+        <View style={styles.centeredContainer}>
+          <ActivityIndicator size="large" color={theme.colors.primary} />
+        </View>
+      ) : summary ? (
+        <View key={`summary-${summary.period}`}>
+          <View style={styles.overviewContainer}>
+            <LinearGradient
+              colors={[theme.colors.primary, theme.colors.secondary]}
+              style={styles.overviewCard}
+            >
+              <View style={styles.overviewHeader}>
+                <Text style={styles.overviewTitle}>Tổng doanh thu</Text>
+                <View style={styles.growthContainer}>
+                  <Icon name={growthIcon} size={16} color={growthColor} />
+                  <Text style={[styles.growthText, { color: growthColor }]}>
+                    {summary.growthRate >= 0 ? "+" : ""}
+                    {Math.abs(summary.growthRate).toFixed(1)}%
+                  </Text>
+                </View>
+              </View>
+              <Text style={styles.revenueAmount}>
+                {formatPrice(summary.totalRevenue)}
+              </Text>
+              <Text style={styles.growthLabel}>{summary.comparisonLabel}</Text>
+            </LinearGradient>
+
+            <View style={styles.statsGrid}>
+              <View style={styles.statCard}>
+                <Icon name="receipt" size={24} color={theme.colors.primary} />
+                <Text style={styles.statValue}>{summary.totalOrders}</Text>
+                <Text style={styles.statLabel}>Tổng đơn hàng</Text>
+              </View>
+              <View style={styles.statCard}>
+                <Icon
+                  name="attach-money"
+                  size={24}
+                  color={theme.colors.success}
+                />
+                <Text style={styles.statValue}>
+                  {formatPrice(summary.averageOrderValue)}
+                </Text>
+                <Text style={styles.statLabel}>Giá trị TB/đơn</Text>
+              </View>
             </View>
           </View>
-          <Text style={styles.revenueAmount}>
-            {formatPrice(currentData.totalRevenue)}
-          </Text>
-        </LinearGradient>
 
-        <View style={styles.statsGrid}>
-          <View style={styles.statCard}>
-            <Icon name="receipt" size={24} color={theme.colors.primary} />
-            <Text style={styles.statValue}>{currentData.totalOrders}</Text>
-            <Text style={styles.statLabel}>Đơn hàng</Text>
+          {selectedPeriod !== "today" && (
+            <View style={styles.chartContainer}>
+              <Text style={styles.sectionTitle}>Doanh thu theo ngày</Text>
+              {renderChart()}
+            </View>
+          )}
+
+          <View style={styles.topItemsContainer}>
+            <Text style={styles.sectionTitle}>Món bán chạy</Text>
+            {safeTopProducts.length === 0 ? (
+              <Text style={styles.emptyHint}>
+                Chưa có dữ liệu món bán chạy.
+              </Text>
+            ) : (
+              <View style={styles.topItemsList}>
+                {safeTopProducts.map((item, index) =>
+                  renderTopProduct(item, index)
+                )}
+              </View>
+            )}
           </View>
-          <View style={styles.statCard}>
-            <Icon name="attach-money" size={24} color={theme.colors.success} />
-            <Text style={styles.statValue}>
-              {formatPrice(currentData.averageOrder).replace("₫", "K")}
+
+          <View style={styles.breakdownContainer}>
+            <Text style={styles.sectionTitle}>
+              Phân tích doanh thu theo menu
             </Text>
-            <Text style={styles.statLabel}>TB/Đơn</Text>
-          </View>
-        </View>
-      </View>
-
-      {/* Daily Revenue Chart */}
-      <View style={styles.chartContainer}>
-        <Text style={styles.sectionTitle}>Doanh thu theo ngày</Text>
-        <View style={styles.chart}>
-          <View style={styles.dailyRevenueGrid}>
-            {dailyRevenue.map(renderDailyRevenue)}
-          </View>
-        </View>
-      </View>
-
-      {/* Top Selling Items */}
-      <View style={styles.topItemsContainer}>
-        <Text style={styles.sectionTitle}>Món bán chạy</Text>
-        <View style={styles.topItemsList}>
-          {topSellingItems.map(renderTopSellingItem)}
-        </View>
-      </View>
-
-      {/* Revenue Breakdown */}
-      <View style={styles.breakdownContainer}>
-        <Text style={styles.sectionTitle}>Phân tích doanh thu</Text>
-        <View style={styles.breakdownGrid}>
-          <View style={styles.breakdownItem}>
-            <View style={styles.breakdownIcon}>
-              <Icon name="restaurant" size={20} color={theme.colors.primary} />
-            </View>
-            <View style={styles.breakdownContent}>
-              <Text style={styles.breakdownTitle}>Dine-in</Text>
-              <Text style={styles.breakdownValue}>
-                {formatPrice(currentData.totalRevenue * 0.3)}
+            {safeMenuRevenue.length === 0 ? (
+              <Text style={styles.emptyHint}>
+                Chưa có dữ liệu doanh thu theo menu.
               </Text>
-            </View>
-          </View>
-          <View style={styles.breakdownItem}>
-            <View style={styles.breakdownIcon}>
-              <Icon
-                name="delivery-dining"
-                size={20}
-                color={theme.colors.secondary}
-              />
-            </View>
-            <View style={styles.breakdownContent}>
-              <Text style={styles.breakdownTitle}>Delivery</Text>
-              <Text style={styles.breakdownValue}>
-                {formatPrice(currentData.totalRevenue * 0.7)}
-              </Text>
-            </View>
+            ) : (
+              <View style={styles.breakdownGrid}>
+                {safeMenuRevenue.map(renderMenuRevenue)}
+              </View>
+            )}
           </View>
         </View>
-      </View>
+      ) : (
+        <View style={styles.centeredContainer}>
+          <Text style={styles.emptyHint}>
+            Không có dữ liệu doanh thu trong giai đoạn này.
+          </Text>
+        </View>
+      )}
     </ScrollView>
   );
 };
@@ -232,6 +370,15 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: theme.colors.background,
+  },
+  contentContainer: {
+    paddingBottom: theme.navbarHeight + theme.spacing.xl,
+  },
+  centeredContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    padding: theme.spacing.xl,
   },
   filtersContainer: {
     backgroundColor: theme.colors.surface,
@@ -282,6 +429,12 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: theme.colors.surface,
     opacity: 0.9,
+  },
+  growthLabel: {
+    marginTop: theme.spacing.xs,
+    fontSize: 12,
+    color: theme.colors.surface,
+    opacity: 0.85,
   },
   growthContainer: {
     flexDirection: "row",
@@ -334,6 +487,11 @@ const styles = StyleSheet.create({
     color: theme.colors.text,
     marginBottom: theme.spacing.md,
   },
+  emptyHint: {
+    fontSize: 14,
+    color: theme.colors.mediumGray,
+    textAlign: "center",
+  },
   chart: {
     height: 200,
   },
@@ -341,7 +499,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "flex-end",
-    height: "100%",
+    height: 180,
   },
   dailyItem: {
     alignItems: "center",
@@ -387,6 +545,12 @@ const styles = StyleSheet.create({
     width: 30,
     alignItems: "center",
   },
+  itemImage: {
+    width: 48,
+    height: 48,
+    borderRadius: theme.roundness,
+    backgroundColor: theme.colors.lightGray,
+  },
   rankText: {
     fontSize: 16,
     fontWeight: "bold",
@@ -395,6 +559,7 @@ const styles = StyleSheet.create({
   itemInfo: {
     flex: 1,
     marginLeft: theme.spacing.md,
+    marginRight: theme.spacing.md,
   },
   itemName: {
     fontSize: 14,
@@ -405,6 +570,9 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: theme.colors.mediumGray,
     marginTop: theme.spacing.xs,
+  },
+  itemMeta: {
+    alignItems: "flex-end",
   },
   itemRevenue: {
     fontSize: 14,
