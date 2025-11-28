@@ -300,14 +300,10 @@ const DashboardScreen: React.FC<DashboardScreenComponentProps> = ({
         <View style={styles.headerContent}>
           <View>
             <Text style={styles.welcomeText}>Xin chào!</Text>
-            <Text style={styles.restaurantName}>Cửa hàng của bạn</Text>
+            <Text style={styles.restaurantName}>
+              {restaurantInfo?.name || "Cửa hàng của bạn"}
+            </Text>
           </View>
-          <TouchableOpacity style={styles.notificationButton}>
-            <Icon name="notifications" size={24} color={theme.colors.surface} />
-            <View style={styles.notificationBadge}>
-              <Text style={styles.notificationText}>3</Text>
-            </View>
-          </TouchableOpacity>
         </View>
       </LinearGradient>
 
