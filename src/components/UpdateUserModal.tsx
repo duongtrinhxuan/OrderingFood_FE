@@ -14,7 +14,7 @@ import {
 import Icon from "react-native-vector-icons/MaterialIcons";
 import * as ImagePicker from "expo-image-picker";
 import { theme } from "../theme/theme";
-import { api } from "../services/api";
+import { api, API_BASE_URL } from "../services/api";
 
 interface UpdateUserModalProps {
   visible: boolean;
@@ -88,8 +88,7 @@ const UpdateUserModal: React.FC<UpdateUserModalProps> = ({
           // Fix localhost URL if needed
           const fixedUrl = imageUrl.replace(
             /http:\/\/localhost:\d+/,
-            process.env.EXPO_PUBLIC_API_URL?.replace(/\/$/, "") ||
-              "http://192.168.1.9:5000"
+            API_BASE_URL
           );
 
           handleChange("avatar", fixedUrl);
