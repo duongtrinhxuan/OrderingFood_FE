@@ -1,72 +1,229 @@
-import React, { useState } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   View,
   Text,
   StyleSheet,
   FlatList,
   TouchableOpacity,
-  TextInput,
+  ActivityIndicator,
   Alert,
+  RefreshControl,
 } from "react-native";
-import Icon from "react-native-vector-icons/MaterialIcons";
 import { LinearGradient } from "expo-linear-gradient";
+import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import { theme } from "../../theme/theme";
+import CartItemCard from "../../components/CartItemCard";
+import { useAuth } from "../../context/AuthContext";
+import { useCart } from "../../context/CartContext";
+import { api } from "../../services/api";
+import { formatPrice } from "../../utils/helpers";
 
-// Mock cart data
-const mockCartItems = [
-  {
-    id: "1",
-    name: "Pizza Margherita",
-    price: 250000,
-    quantity: 2,
-    image: "https://via.placeholder.com/100x100",
-    restaurant: "Pizza Hut",
-  },
-  {
-    id: "2",
-    name: "Chicken Burger",
-    price: 89000,
-    quantity: 1,
-    image: "https://via.placeholder.com/100x100",
-    restaurant: "KFC",
-  },
-  {
-    id: "3",
-    name: "Big Mac",
-    price: 75000,
-    quantity: 3,
-    image: "https://via.placeholder.com/100x100",
-    restaurant: "McDonald's",
-  },
-];
+interface CartItem {
+  id: number;
+  quantity: number;
+  unitPrice: number;
+  product: {
+    id: number;
+    name: string;
+    price: number;
+    imageUrl?: string;
+    restaurant?: {
+      id: number;
+      name: string;
+    };
+  };
+}
+
+const SHIPPING_FEE = 20000; // Phí ship mặc định
 
 const CartScreen = () => {
-  const [cartItems, setCartItems] = useState(mockCartItems);
-  const [deliveryAddress, setDeliveryAddress] = useState(
-    "123 Đường ABC, Quận 1, TP.HCM"
-  );
-  const [note, setNote] = useState("");
+  const [cartItems, setCartItems] = useState<CartItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [updatingItemId, setUpdatingItemId] = useState<number | null>(null);
 
-  const formatPrice = (price: number) => {
-    return new Intl.NumberFormat("vi-VN", {
-      style: "currency",
-      currency: "VND",
-    }).format(price);
-  };
+  const { user } = useAuth();
+  const { cartId, refreshCartCount } = useCart();
+  const navigation = useNavigation();
 
-  const updateQuantity = (id: string, newQuantity: number) => {
-    if (newQuantity <= 0) {
-      removeItem(id);
+  // Debug: Log cartId changes
+  useEffect(() => {
+    console.log("CartScreen: cartId changed to:", cartId);
+  }, [cartId]);
+
+  const loadCartItems = useCallback(async () => {
+    if (!user?.id) {
+      console.log("CartScreen: No user ID");
+      setCartItems([]);
+      setLoading(false);
       return;
     }
-    setCartItems((items) =>
-      items.map((item) =>
-        item.id === id ? { ...item, quantity: newQuantity } : item
-      )
-    );
+
+    if (!cartId) {
+      console.log("CartScreen: No cartId, trying to get or create cart");
+      try {
+        const cart = await api.getOrCreateUserCart(user.id);
+        const newCartId = (cart as any).id;
+        if (!newCartId) {
+          console.log("CartScreen: Could not get cart ID");
+          setCartItems([]);
+          setLoading(false);
+          return;
+        }
+        // Retry with new cartId
+        const items = await api.getCartItemsByCart(newCartId);
+        console.log("CartScreen: Loaded items:", items);
+        const activeItems = (items as any[]).filter(
+          (item: any) => item.isActive !== false
+        );
+        console.log("CartScreen: Active items:", activeItems);
+        setCartItems(activeItems);
+        setLoading(false);
+        return;
+      } catch (error: any) {
+        console.error("CartScreen: Error getting cart:", error);
+        setCartItems([]);
+        setLoading(false);
+        return;
+      }
+    }
+
+    try {
+      setLoading(true);
+      console.log("CartScreen: Loading cart items for cartId:", cartId);
+      const items = await api.getCartItemsByCart(cartId);
+      console.log(
+        "CartScreen: Raw items from API:",
+        JSON.stringify(items, null, 2)
+      );
+
+      // Kiểm tra nếu items là array
+      if (!Array.isArray(items)) {
+        console.log("CartScreen: Items is not an array:", typeof items);
+        setCartItems([]);
+        setLoading(false);
+        return;
+      }
+
+      // Đảm bảo chỉ lấy items có isActive = true
+      const activeItems = items.filter(
+        (item: any) => item.isActive !== false && item.isActive !== null
+      );
+      console.log(
+        "CartScreen: Filtered active items count:",
+        activeItems.length
+      );
+      console.log(
+        "CartScreen: Active items:",
+        JSON.stringify(activeItems, null, 2)
+      );
+
+      // Kiểm tra cấu trúc dữ liệu
+      if (activeItems.length > 0) {
+        const firstItem = activeItems[0];
+        console.log("CartScreen: First item structure:", {
+          hasProduct: !!firstItem.product,
+          productName: firstItem.product?.name,
+          quantity: firstItem.quantity,
+          unitPrice: firstItem.unitPrice,
+        });
+      }
+
+      setCartItems(activeItems);
+    } catch (error: any) {
+      console.error("CartScreen: Error loading cart items:", error);
+      console.error(
+        "CartScreen: Error details:",
+        error.message || JSON.stringify(error, null, 2)
+      );
+      // Không hiển thị alert nếu chỉ là giỏ hàng trống
+      if (error.message && !error.message.includes("404")) {
+        Alert.alert(
+          "Lỗi",
+          `Không thể tải giỏ hàng: ${error.message || "Vui lòng thử lại"}`
+        );
+      }
+      setCartItems([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [user?.id, cartId]);
+
+  useEffect(() => {
+    loadCartItems();
+  }, [loadCartItems]);
+
+  // Reload cart items when screen is focused
+  useFocusEffect(
+    useCallback(() => {
+      // Refresh cart count first to get latest cartId
+      refreshCartCount().then(() => {
+        // Then load cart items
+        loadCartItems();
+      });
+    }, [loadCartItems, refreshCartCount])
+  );
+
+  const onRefresh = useCallback(() => {
+    setRefreshing(true);
+    loadCartItems().finally(() => {
+      setRefreshing(false);
+      refreshCartCount();
+    });
+  }, [loadCartItems, refreshCartCount]);
+
+  const handleIncrease = async (item: CartItem) => {
+    if (updatingItemId !== null) return;
+
+    try {
+      setUpdatingItemId(item.id);
+      const newQuantity = item.quantity + 1;
+      const newUnitPrice = item.product.price * newQuantity;
+
+      await api.updateCartItem(item.id, {
+        quantity: newQuantity,
+        unitPrice: newUnitPrice,
+      });
+
+      await loadCartItems();
+      await refreshCartCount();
+    } catch (error: any) {
+      console.error("Error updating cart item:", error);
+      Alert.alert("Lỗi", "Không thể cập nhật số lượng. Vui lòng thử lại.");
+    } finally {
+      setUpdatingItemId(null);
+    }
   };
 
-  const removeItem = (id: string) => {
+  const handleDecrease = async (item: CartItem) => {
+    if (updatingItemId !== null) return;
+
+    if (item.quantity <= 1) {
+      handleRemove(item);
+      return;
+    }
+
+    try {
+      setUpdatingItemId(item.id);
+      const newQuantity = item.quantity - 1;
+      const newUnitPrice = item.product.price * newQuantity;
+
+      await api.updateCartItem(item.id, {
+        quantity: newQuantity,
+        unitPrice: newUnitPrice,
+      });
+
+      await loadCartItems();
+      await refreshCartCount();
+    } catch (error: any) {
+      console.error("Error updating cart item:", error);
+      Alert.alert("Lỗi", "Không thể cập nhật số lượng. Vui lòng thử lại.");
+    } finally {
+      setUpdatingItemId(null);
+    }
+  };
+
+  const handleRemove = (item: CartItem) => {
     Alert.alert(
       "Xóa món ăn",
       "Bạn có chắc chắn muốn xóa món ăn này khỏi giỏ hàng?",
@@ -75,26 +232,27 @@ const CartScreen = () => {
         {
           text: "Xóa",
           style: "destructive",
-          onPress: () =>
-            setCartItems((items) => items.filter((item) => item.id !== id)),
+          onPress: async () => {
+            try {
+              await api.deleteCartItem(item.id);
+              await loadCartItems();
+              await refreshCartCount();
+            } catch (error: any) {
+              console.error("Error removing cart item:", error);
+              Alert.alert("Lỗi", "Không thể xóa món ăn. Vui lòng thử lại.");
+            }
+          },
         },
       ]
     );
   };
 
   const calculateSubtotal = () => {
-    return cartItems.reduce(
-      (total, item) => total + item.price * item.quantity,
-      0
-    );
-  };
-
-  const calculateDeliveryFee = () => {
-    return 15000; // Fixed delivery fee
+    return cartItems.reduce((total, item) => total + item.unitPrice, 0);
   };
 
   const calculateTotal = () => {
-    return calculateSubtotal() + calculateDeliveryFee();
+    return calculateSubtotal() + SHIPPING_FEE;
   };
 
   const handleCheckout = () => {
@@ -102,59 +260,30 @@ const CartScreen = () => {
       Alert.alert("Giỏ hàng trống", "Vui lòng thêm món ăn vào giỏ hàng");
       return;
     }
-    Alert.alert("Đặt hàng", "Chuyển đến trang thanh toán");
+    navigation.navigate("Checkout" as never);
   };
 
-  const renderCartItem = ({ item }: { item: any }) => (
-    <View style={styles.cartItem}>
-      <View style={styles.itemImageContainer}>
-        <Icon name="restaurant" size={40} color={theme.colors.primary} />
-      </View>
-
-      <View style={styles.itemDetails}>
-        <Text style={styles.itemName} numberOfLines={2}>
-          {item.name}
-        </Text>
-        <Text style={styles.itemRestaurant}>{item.restaurant}</Text>
-        <Text style={styles.itemPrice}>{formatPrice(item.price)}</Text>
-      </View>
-
-      <View style={styles.quantityContainer}>
-        <TouchableOpacity
-          style={styles.quantityButton}
-          onPress={() => updateQuantity(item.id, item.quantity - 1)}
-        >
-          <Icon name="remove" size={20} color={theme.colors.primary} />
-        </TouchableOpacity>
-
-        <Text style={styles.quantityText}>{item.quantity}</Text>
-
-        <TouchableOpacity
-          style={styles.quantityButton}
-          onPress={() => updateQuantity(item.id, item.quantity + 1)}
-        >
-          <Icon name="add" size={20} color={theme.colors.primary} />
-        </TouchableOpacity>
-      </View>
-
-      <TouchableOpacity
-        style={styles.removeButton}
-        onPress={() => removeItem(item.id)}
-      >
-        <Icon name="close" size={20} color={theme.colors.error} />
-      </TouchableOpacity>
-    </View>
+  const renderCartItem = ({ item }: { item: CartItem }) => (
+    <CartItemCard
+      cartItem={item}
+      onIncrease={() => handleIncrease(item)}
+      onDecrease={() => handleDecrease(item)}
+      onRemove={() => handleRemove(item)}
+    />
   );
+
+  if (loading) {
+    return (
+      <View style={[styles.container, styles.centerContent]}>
+        <ActivityIndicator size="large" color={theme.colors.primary} />
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
       {cartItems.length === 0 ? (
         <View style={styles.emptyContainer}>
-          <Icon
-            name="shopping-cart"
-            size={64}
-            color={theme.colors.mediumGray}
-          />
           <Text style={styles.emptyText}>Giỏ hàng trống</Text>
           <Text style={styles.emptySubtext}>
             Thêm món ăn yêu thích vào giỏ hàng
@@ -165,76 +294,59 @@ const CartScreen = () => {
           <FlatList
             data={cartItems}
             renderItem={renderCartItem}
-            keyExtractor={(item) => item.id}
+            keyExtractor={(item) => item.id.toString()}
             showsVerticalScrollIndicator={false}
-            contentContainerStyle={styles.cartList}
+            contentContainerStyle={[
+              styles.cartList,
+              { paddingBottom: 200 + theme.navbarHeight }, // Thêm padding để không bị che bởi summary, button và navbar
+            ]}
+            refreshControl={
+              <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+            }
           />
 
-          {/* Delivery Address */}
-          <View style={styles.addressContainer}>
-            <Text style={styles.sectionTitle}>Địa chỉ giao hàng</Text>
-            <View style={styles.addressInputContainer}>
-              <Icon name="place" size={20} color={theme.colors.primary} />
-              <TextInput
-                style={styles.addressInput}
-                value={deliveryAddress}
-                onChangeText={setDeliveryAddress}
-                placeholder="Nhập địa chỉ giao hàng"
-                placeholderTextColor={theme.colors.placeholder}
-              />
+          {/* Fixed Bottom Section */}
+          <View style={styles.bottomSection}>
+            {/* Order Summary */}
+            <View style={styles.summaryContainer}>
+              <View style={styles.summaryRow}>
+                <Text style={styles.summaryLabel}>Tạm tính</Text>
+                <Text style={styles.summaryValue}>
+                  {formatPrice(calculateSubtotal())}
+                </Text>
+              </View>
+              <View style={styles.summaryRow}>
+                <Text style={styles.summaryLabel}>Phí giao hàng</Text>
+                <Text style={styles.summaryValue}>
+                  {formatPrice(SHIPPING_FEE)}
+                </Text>
+              </View>
+              <View style={[styles.summaryRow, styles.totalRow]}>
+                <Text style={styles.totalLabel}>Tổng cộng</Text>
+                <Text style={styles.totalValue}>
+                  {formatPrice(calculateTotal())}
+                </Text>
+              </View>
             </View>
-          </View>
 
-          {/* Note */}
-          <View style={styles.noteContainer}>
-            <Text style={styles.sectionTitle}>Ghi chú</Text>
-            <TextInput
-              style={styles.noteInput}
-              value={note}
-              onChangeText={setNote}
-              placeholder="Ghi chú cho đơn hàng..."
-              placeholderTextColor={theme.colors.placeholder}
-              multiline
-              numberOfLines={3}
-            />
-          </View>
-
-          {/* Order Summary */}
-          <View style={styles.summaryContainer}>
-            <View style={styles.summaryRow}>
-              <Text style={styles.summaryLabel}>Tạm tính</Text>
-              <Text style={styles.summaryValue}>
-                {formatPrice(calculateSubtotal())}
-              </Text>
-            </View>
-            <View style={styles.summaryRow}>
-              <Text style={styles.summaryLabel}>Phí giao hàng</Text>
-              <Text style={styles.summaryValue}>
-                {formatPrice(calculateDeliveryFee())}
-              </Text>
-            </View>
-            <View style={[styles.summaryRow, styles.totalRow]}>
-              <Text style={styles.totalLabel}>Tổng cộng</Text>
-              <Text style={styles.totalValue}>
-                {formatPrice(calculateTotal())}
-              </Text>
-            </View>
-          </View>
-
-          {/* Checkout Button */}
-          <TouchableOpacity
-            style={styles.checkoutButton}
-            onPress={handleCheckout}
-          >
-            <LinearGradient
-              colors={[theme.colors.primary, theme.colors.secondary]}
-              style={styles.gradientButton}
+            {/* Checkout Button */}
+            <TouchableOpacity
+              style={styles.checkoutButton}
+              onPress={handleCheckout}
+              activeOpacity={0.8}
             >
-              <Text style={styles.checkoutButtonText}>
-                Đặt hàng - {formatPrice(calculateTotal())}
-              </Text>
-            </LinearGradient>
-          </TouchableOpacity>
+              <LinearGradient
+                colors={[theme.colors.primary, theme.colors.secondary]}
+                style={styles.gradientButton}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+              >
+                <Text style={styles.checkoutButtonText}>
+                  Tiến hành mua hàng
+                </Text>
+              </LinearGradient>
+            </TouchableOpacity>
+          </View>
         </>
       )}
     </View>
@@ -245,6 +357,10 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: theme.colors.background,
+  },
+  centerContent: {
+    justifyContent: "center",
+    alignItems: "center",
   },
   emptyContainer: {
     flex: 1,
@@ -267,118 +383,24 @@ const styles = StyleSheet.create({
   cartList: {
     padding: theme.spacing.lg,
   },
-  cartItem: {
-    flexDirection: "row",
-    backgroundColor: theme.colors.surface,
-    borderRadius: theme.roundness,
-    padding: theme.spacing.md,
-    marginBottom: theme.spacing.md,
-    alignItems: "center",
-    ...theme.shadows.small,
-  },
-  itemImageContainer: {
-    width: 60,
-    height: 60,
-    backgroundColor: theme.colors.lightOrange,
-    borderRadius: theme.roundness / 2,
-    justifyContent: "center",
-    alignItems: "center",
-    marginRight: theme.spacing.md,
-  },
-  itemDetails: {
-    flex: 1,
-    marginRight: theme.spacing.sm,
-  },
-  itemName: {
-    fontSize: 16,
-    fontWeight: "bold",
-    color: theme.colors.text,
-    marginBottom: theme.spacing.xs,
-  },
-  itemRestaurant: {
-    fontSize: 12,
-    color: theme.colors.mediumGray,
-    marginBottom: theme.spacing.xs,
-  },
-  itemPrice: {
-    fontSize: 14,
-    fontWeight: "bold",
-    color: theme.colors.primary,
-  },
-  quantityContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginRight: theme.spacing.sm,
-  },
-  quantityButton: {
-    width: 32,
-    height: 32,
-    borderRadius: theme.roundness / 2,
-    backgroundColor: theme.colors.lightOrange,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  quantityText: {
-    fontSize: 16,
-    fontWeight: "bold",
-    color: theme.colors.text,
-    marginHorizontal: theme.spacing.sm,
-    minWidth: 20,
-    textAlign: "center",
-  },
-  removeButton: {
-    padding: theme.spacing.sm,
-  },
-  addressContainer: {
-    backgroundColor: theme.colors.surface,
-    padding: theme.spacing.lg,
-    marginHorizontal: theme.spacing.lg,
-    borderRadius: theme.roundness,
-    marginBottom: theme.spacing.md,
-    ...theme.shadows.small,
-  },
-  sectionTitle: {
-    fontSize: 16,
-    fontWeight: "bold",
-    color: theme.colors.text,
-    marginBottom: theme.spacing.sm,
-  },
-  addressInputContainer: {
-    flexDirection: "row",
-    alignItems: "center",
+  bottomSection: {
+    position: "absolute",
+    bottom: theme.navbarHeight,
+    left: 0,
+    right: 0,
     backgroundColor: theme.colors.background,
-    borderRadius: theme.roundness / 2,
-    paddingHorizontal: theme.spacing.md,
-    paddingVertical: theme.spacing.sm,
-  },
-  addressInput: {
-    flex: 1,
-    marginLeft: theme.spacing.sm,
-    fontSize: 14,
-    color: theme.colors.text,
-  },
-  noteContainer: {
-    backgroundColor: theme.colors.surface,
-    padding: theme.spacing.lg,
-    marginHorizontal: theme.spacing.lg,
-    borderRadius: theme.roundness,
-    marginBottom: theme.spacing.md,
-    ...theme.shadows.small,
-  },
-  noteInput: {
-    backgroundColor: theme.colors.background,
-    borderRadius: theme.roundness / 2,
-    padding: theme.spacing.md,
-    fontSize: 14,
-    color: theme.colors.text,
-    textAlignVertical: "top",
+    borderTopWidth: 1,
+    borderTopColor: theme.colors.border,
+    paddingBottom: theme.spacing.md,
+    ...theme.shadows.medium,
   },
   summaryContainer: {
     backgroundColor: theme.colors.surface,
     padding: theme.spacing.lg,
     marginHorizontal: theme.spacing.lg,
+    marginTop: theme.spacing.md,
     borderRadius: theme.roundness,
-    marginBottom: theme.spacing.md,
+    marginBottom: theme.spacing.sm,
     ...theme.shadows.small,
   },
   summaryRow: {
@@ -413,19 +435,22 @@ const styles = StyleSheet.create({
     color: theme.colors.primary,
   },
   checkoutButton: {
-    margin: theme.spacing.lg,
+    marginHorizontal: theme.spacing.lg,
+    marginBottom: theme.spacing.md,
     borderRadius: theme.roundness,
     overflow: "hidden",
     ...theme.shadows.medium,
   },
   gradientButton: {
-    paddingVertical: theme.spacing.md,
+    paddingVertical: theme.spacing.md + 4,
     alignItems: "center",
+    justifyContent: "center",
   },
   checkoutButtonText: {
     fontSize: 18,
     fontWeight: "bold",
     color: theme.colors.surface,
+    letterSpacing: 0.5,
   },
 });
 
