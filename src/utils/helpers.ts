@@ -1,40 +1,57 @@
-import {format} from 'date-fns';
-import {vi} from 'date-fns/locale';
-
 // Format price to Vietnamese currency
 export const formatPrice = (price: number): string => {
-  return new Intl.NumberFormat('vi-VN', {
-    style: 'currency',
-    currency: 'VND',
+  return new Intl.NumberFormat("vi-VN", {
+    style: "currency",
+    currency: "VND",
   }).format(price);
 };
 
 // Format date to Vietnamese format
-export const formatDate = (date: string | Date, formatStr: string = 'dd/MM/yyyy'): string => {
-  const dateObj = typeof date === 'string' ? new Date(date) : date;
-  return format(dateObj, formatStr, {locale: vi});
+export const formatDate = (
+  date: string | Date,
+  formatStr: string = "dd/MM/yyyy"
+): string => {
+  const dateObj = typeof date === "string" ? new Date(date) : date;
+
+  if (isNaN(dateObj.getTime())) {
+    return "";
+  }
+
+  const day = String(dateObj.getDate()).padStart(2, "0");
+  const month = String(dateObj.getMonth() + 1).padStart(2, "0");
+  const year = dateObj.getFullYear();
+  const hours = String(dateObj.getHours()).padStart(2, "0");
+  const minutes = String(dateObj.getMinutes()).padStart(2, "0");
+
+  if (formatStr === "dd/MM/yyyy HH:mm") {
+    return `${day}/${month}/${year} ${hours}:${minutes}`;
+  }
+
+  return `${day}/${month}/${year}`;
 };
 
 // Format date time
 export const formatDateTime = (date: string | Date): string => {
-  return formatDate(date, 'dd/MM/yyyy HH:mm');
+  return formatDate(date, "dd/MM/yyyy HH:mm");
 };
 
 // Format relative time (e.g., "2 phút trước")
 export const formatRelativeTime = (date: string | Date): string => {
   const now = new Date();
-  const targetDate = typeof date === 'string' ? new Date(date) : date;
-  const diffInMinutes = Math.floor((now.getTime() - targetDate.getTime()) / (1000 * 60));
+  const targetDate = typeof date === "string" ? new Date(date) : date;
+  const diffInMinutes = Math.floor(
+    (now.getTime() - targetDate.getTime()) / (1000 * 60)
+  );
 
-  if (diffInMinutes < 1) return 'Vừa xong';
+  if (diffInMinutes < 1) return "Vừa xong";
   if (diffInMinutes < 60) return `${diffInMinutes} phút trước`;
-  
+
   const diffInHours = Math.floor(diffInMinutes / 60);
   if (diffInHours < 24) return `${diffInHours} giờ trước`;
-  
+
   const diffInDays = Math.floor(diffInHours / 24);
   if (diffInDays < 7) return `${diffInDays} ngày trước`;
-  
+
   return formatDate(targetDate);
 };
 
@@ -76,16 +93,16 @@ export const isValidEmail = (email: string): boolean => {
 // Validate phone number (Vietnamese format)
 export const isValidPhone = (phone: string): boolean => {
   const phoneRegex = /^(\+84|84|0)[1-9][0-9]{8,9}$/;
-  return phoneRegex.test(phone.replace(/\s/g, ''));
+  return phoneRegex.test(phone.replace(/\s/g, ""));
 };
 
 // Format phone number
 export const formatPhone = (phone: string): string => {
-  const cleaned = phone.replace(/\D/g, '');
-  if (cleaned.startsWith('84')) {
+  const cleaned = phone.replace(/\D/g, "");
+  if (cleaned.startsWith("84")) {
     return `+${cleaned}`;
   }
-  if (cleaned.startsWith('0')) {
+  if (cleaned.startsWith("0")) {
     return `+84${cleaned.slice(1)}`;
   }
   return `+84${cleaned}`;
@@ -131,15 +148,15 @@ export const capitalize = (str: string): string => {
 // Truncate text
 export const truncateText = (text: string, maxLength: number): string => {
   if (text.length <= maxLength) return text;
-  return text.slice(0, maxLength) + '...';
+  return text.slice(0, maxLength) + "...";
 };
 
 // Get initials from name
 export const getInitials = (name: string): string => {
   return name
-    .split(' ')
-    .map(word => word.charAt(0))
-    .join('')
+    .split(" ")
+    .map((word) => word.charAt(0))
+    .join("")
     .toUpperCase()
     .slice(0, 2);
 };
@@ -151,10 +168,10 @@ export const isEmpty = (str: string): boolean => {
 
 // Deep clone object
 export const deepClone = <T>(obj: T): T => {
-  if (obj === null || typeof obj !== 'object') return obj;
+  if (obj === null || typeof obj !== "object") return obj;
   if (obj instanceof Date) return new Date(obj.getTime()) as any;
-  if (obj instanceof Array) return obj.map(item => deepClone(item)) as any;
-  if (typeof obj === 'object') {
+  if (obj instanceof Array) return obj.map((item) => deepClone(item)) as any;
+  if (typeof obj === "object") {
     const clonedObj = {} as any;
     for (const key in obj) {
       if (obj.hasOwnProperty(key)) {
@@ -180,14 +197,14 @@ export const groupBy = <T>(array: T[], key: keyof T): Record<string, T[]> => {
 export const sortBy = <T>(
   array: T[],
   key: keyof T,
-  direction: 'asc' | 'desc' = 'asc'
+  direction: "asc" | "desc" = "asc"
 ): T[] => {
   return [...array].sort((a, b) => {
     const aVal = a[key];
     const bVal = b[key];
-    
-    if (aVal < bVal) return direction === 'asc' ? -1 : 1;
-    if (aVal > bVal) return direction === 'asc' ? 1 : -1;
+
+    if (aVal < bVal) return direction === "asc" ? -1 : 1;
+    if (aVal > bVal) return direction === "asc" ? 1 : -1;
     return 0;
   });
 };
@@ -229,6 +246,6 @@ export const storage = {
   },
   clear: async (): Promise<void> => {
     // Implementation would use AsyncStorage or MMKV
-    console.log('Storage clear');
+    console.log("Storage clear");
   },
 };
