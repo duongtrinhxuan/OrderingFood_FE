@@ -1,7 +1,9 @@
 import React from "react";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
+import { View, Text, StyleSheet } from "react-native";
 import Icon from "react-native-vector-icons/MaterialIcons";
 import { theme } from "../theme/theme";
+import { useCart } from "../context/CartContext";
 
 // Import screens
 import HomeScreen from "../screens/client/HomeScreen";
@@ -13,6 +15,8 @@ import ProfileScreen from "../screens/client/ProfileScreen";
 const Tab = createBottomTabNavigator();
 
 const MainTabNavigator = () => {
+  const { cartCount } = useCart();
+
   return (
     <Tab.Navigator
       safeAreaInsets={{ bottom: 8 }}
@@ -38,6 +42,19 @@ const MainTabNavigator = () => {
               break;
             default:
               iconName = "home";
+          }
+
+          if (route.name === "Cart" && cartCount > 0) {
+            return (
+              <View>
+                <Icon name={iconName} size={size} color={color} />
+                <View style={styles.badge}>
+                  <Text style={styles.badgeText}>
+                    {cartCount > 99 ? "99+" : cartCount}
+                  </Text>
+                </View>
+              </View>
+            );
           }
 
           return <Icon name={iconName} size={size} color={color} />;
@@ -96,5 +113,25 @@ const MainTabNavigator = () => {
     </Tab.Navigator>
   );
 };
+
+const styles = StyleSheet.create({
+  badge: {
+    position: "absolute",
+    right: -8,
+    top: -4,
+    backgroundColor: theme.colors.error,
+    borderRadius: 10,
+    minWidth: 20,
+    height: 20,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 4,
+  },
+  badgeText: {
+    color: theme.colors.surface,
+    fontSize: 10,
+    fontWeight: "bold",
+  },
+});
 
 export default MainTabNavigator;
