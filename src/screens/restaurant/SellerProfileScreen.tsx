@@ -10,6 +10,7 @@ import {
   TextInput,
   Alert,
   RefreshControl,
+  Modal,
 } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import Icon from "react-native-vector-icons/MaterialIcons";
@@ -27,15 +28,6 @@ type SellerProfileScreenNavigationProp = StackNavigationProp<
   SellerStackParamList,
   "SellerProfile"
 >;
-
-type Address = {
-  id: number;
-  label: string;
-  province: string;
-  district: string;
-  ward: string;
-  street: string;
-};
 
 type Restaurant = {
   id: number;
@@ -59,28 +51,60 @@ interface Props {
   navigation: SellerProfileScreenNavigationProp;
 }
 
-const tabs = [
-  { key: "info", label: "Thông tin cá nhân", icon: "person" },
-  { key: "address", label: "Quản lý địa chỉ", icon: "place" },
-  { key: "payment", label: "Thông tin thanh toán", icon: "payment" },
-];
-
 const SellerProfileScreen: React.FC<Props> = ({ navigation }) => {
   const { user, setUser, logout } = useAuth();
   const [profile, setProfile] = useState<any | null>(null);
   const [restaurants, setRestaurants] = useState<Restaurant[]>([]);
-  const [activeTab, setActiveTab] = useState("info");
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showInfoModal, setShowInfoModal] = useState(false);
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [monthlyRevenue, setMonthlyRevenue] = useState(0);
   const [form, setForm] = useState({
     email: "",
     username: "",
     phone: "",
     gender: "male",
   });
+
+  const fetchMonthlyRevenue = useCallback(
+    async (ownedRestaurants: Restaurant[]) => {
+      if (!ownedRestaurants || ownedRestaurants.length === 0) {
+        setMonthlyRevenue(0);
+        return;
+      }
+
+      try {
+        const summaries = await Promise.all(
+          ownedRestaurants.map((restaurant) =>
+            api
+              .getRestaurantRevenueSummary(restaurant.id, "month")
+              .catch((error) => {
+                console.error(
+                  `Failed to load revenue for restaurant ${restaurant.id}`,
+                  error
+                );
+                return null;
+              })
+          )
+        );
+
+        const total = summaries.reduce((sum, summary) => {
+          const value = Number((summary as any)?.totalRevenue ?? 0);
+          return Number.isFinite(value) ? sum + value : sum;
+        }, 0);
+
+        setMonthlyRevenue(total);
+      } catch (error) {
+        console.error("Failed to aggregate monthly revenue", error);
+        setMonthlyRevenue(0);
+      }
+    },
+    []
+  );
 
   const fetchData = useCallback(async () => {
     if (!user?.id) {
@@ -103,6 +127,7 @@ const SellerProfileScreen: React.FC<Props> = ({ navigation }) => {
         gender: userDetail.gender ?? "male",
       });
       setRestaurants(ownedRestaurants);
+      fetchMonthlyRevenue(ownedRestaurants);
       setUser({
         id: userDetail.id,
         email: userDetail.email,
@@ -118,7 +143,7 @@ const SellerProfileScreen: React.FC<Props> = ({ navigation }) => {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [user?.id, refreshing, setUser]);
+  }, [user?.id, refreshing, setUser, fetchMonthlyRevenue]);
 
   useFocusEffect(
     useCallback(() => {
@@ -139,9 +164,9 @@ const SellerProfileScreen: React.FC<Props> = ({ navigation }) => {
     return {
       restaurantCount: count,
       averageRating: Number.isFinite(avg) ? avg : 0,
-      totalRevenue: 0,
+      totalRevenue: monthlyRevenue,
     };
-  }, [restaurants]);
+  }, [restaurants, monthlyRevenue]);
 
   const formatRestaurantRating = (rating?: number) => {
     if (typeof rating === "number" && !Number.isNaN(rating)) {
@@ -274,46 +299,7 @@ const SellerProfileScreen: React.FC<Props> = ({ navigation }) => {
     navigation.navigate("RestaurantTabs", { restaurantId });
   };
 
-  const renderAddressTab = () => {
-    const addresses: Address[] = profile?.addresses ?? [];
-    if (addresses.length === 0) {
-      return (
-        <View style={styles.emptyState}>
-          <Icon name="place" size={32} color={theme.colors.primary} />
-          <Text style={styles.emptyStateTitle}>Chưa có địa chỉ</Text>
-          <Text style={styles.emptyStateDescription}>
-            Hãy thêm địa chỉ kinh doanh để khách hàng có thể tìm thấy bạn dễ
-            dàng hơn.
-          </Text>
-        </View>
-      );
-    }
-
-    return addresses.map((item) => (
-      <View key={item.id} style={styles.cardRow}>
-        <Icon name="location-pin" size={24} color={theme.colors.primary} />
-        <View style={styles.cardContent}>
-          <Text style={styles.cardTitle}>{item.label}</Text>
-          <Text style={styles.cardSubtitle}>
-            {item.street}, {item.ward}, {item.district}, {item.province}
-          </Text>
-        </View>
-      </View>
-    ));
-  };
-
-  const renderPaymentTab = () => (
-    <View style={styles.emptyState}>
-      <Icon name="credit-card" size={32} color={theme.colors.primary} />
-      <Text style={styles.emptyStateTitle}>Chưa cấu hình thanh toán</Text>
-      <Text style={styles.emptyStateDescription}>
-        Hãy liên hệ quản trị viên để cấu hình phương thức thanh toán phù hợp cho
-        nhà hàng của bạn.
-      </Text>
-    </View>
-  );
-
-  const renderInfoTab = () => (
+  const renderInfoForm = () => (
     <View>
       <TextInput
         style={styles.input}
@@ -380,16 +366,20 @@ const SellerProfileScreen: React.FC<Props> = ({ navigation }) => {
     </View>
   );
 
-  const renderTabContent = () => {
-    switch (activeTab) {
-      case "address":
-        return renderAddressTab();
-      case "payment":
-        return renderPaymentTab();
-      default:
-        return renderInfoTab();
-    }
-  };
+  const actionItems = [
+    {
+      key: "info",
+      label: "Thông tin cá nhân",
+      icon: "person",
+      onPress: () => setShowInfoModal(true),
+    },
+    {
+      key: "payment",
+      label: "Thông tin thanh toán",
+      icon: "payment",
+      onPress: () => setShowPaymentModal(true),
+    },
+  ];
 
   // Ưu tiên avatar từ user state (được cập nhật ngay sau upload)
   // sau đó mới dùng profile?.avatar
@@ -464,37 +454,23 @@ const SellerProfileScreen: React.FC<Props> = ({ navigation }) => {
       </View>
 
       <View style={styles.tabWrapper}>
-        {tabs.map((tab) => (
+        {actionItems.map((item) => (
           <TouchableOpacity
-            key={tab.key}
-            style={[
-              styles.tabButton,
-              activeTab === tab.key && styles.activeTabButton,
-            ]}
-            onPress={() => setActiveTab(tab.key)}
+            key={item.key}
+            style={styles.tabButton}
+            onPress={item.onPress}
           >
+            <Icon name={item.icon} size={20} color={theme.colors.primary} />
+            <Text style={styles.tabButtonText}>{item.label}</Text>
             <Icon
-              name={tab.icon}
+              name="chevron-right"
               size={20}
-              color={
-                activeTab === tab.key
-                  ? theme.colors.surface
-                  : theme.colors.primary
-              }
+              color={theme.colors.mediumGray}
+              style={{ marginLeft: "auto" }}
             />
-            <Text
-              style={[
-                styles.tabButtonText,
-                activeTab === tab.key && styles.activeTabButtonText,
-              ]}
-            >
-              {tab.label}
-            </Text>
           </TouchableOpacity>
         ))}
       </View>
-
-      <View style={styles.card}>{loading ? null : renderTabContent()}</View>
 
       <View style={styles.sectionHeader}>
         <Text style={styles.sectionTitle}>Nhà hàng đang quản lý</Text>
@@ -597,6 +573,65 @@ const SellerProfileScreen: React.FC<Props> = ({ navigation }) => {
         defaultPhone={user?.phone || ""}
         userId={user?.id || 0}
       />
+      <Modal
+        visible={showInfoModal}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setShowInfoModal(false)}
+      >
+        <View style={styles.modalScreen}>
+          <View style={styles.modalHeaderBar}>
+            <TouchableOpacity
+              onPress={() => setShowInfoModal(false)}
+              style={styles.modalHeaderButton}
+            >
+              <Icon name="arrow-back" size={24} color={theme.colors.text} />
+            </TouchableOpacity>
+            <Text style={styles.modalHeaderTitle}>Thông tin cá nhân</Text>
+            <View style={styles.modalHeaderSpacer} />
+          </View>
+          <ScrollView
+            style={styles.modalBody}
+            contentContainerStyle={styles.modalBodyContent}
+            showsVerticalScrollIndicator={false}
+          >
+            {renderInfoForm()}
+          </ScrollView>
+        </View>
+      </Modal>
+      <Modal
+        visible={showPaymentModal}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setShowPaymentModal(false)}
+      >
+        <View style={styles.modalScreen}>
+          <View style={styles.modalHeaderBar}>
+            <TouchableOpacity
+              onPress={() => setShowPaymentModal(false)}
+              style={styles.modalHeaderButton}
+            >
+              <Icon name="arrow-back" size={24} color={theme.colors.text} />
+            </TouchableOpacity>
+            <Text style={styles.modalHeaderTitle}>Thông tin thanh toán</Text>
+            <View style={styles.modalHeaderSpacer} />
+          </View>
+          <ScrollView
+            style={styles.modalBody}
+            contentContainerStyle={styles.modalBodyContent}
+            showsVerticalScrollIndicator={false}
+          >
+            <View style={styles.emptyState}>
+              <Icon name="credit-card" size={40} color={theme.colors.primary} />
+              <Text style={styles.emptyStateTitle}>Đang phát triển</Text>
+              <Text style={styles.emptyStateDescription}>
+                Khu vực quản lý thông tin thanh toán sẽ sớm được cập nhật. Vui
+                lòng quay lại sau.
+              </Text>
+            </View>
+          </ScrollView>
+        </View>
+      </Modal>
     </ScrollView>
   );
 };
@@ -877,6 +912,39 @@ const styles = StyleSheet.create({
   restaurantStatText: {
     fontSize: 12,
     color: theme.colors.text,
+  },
+  modalScreen: {
+    flex: 1,
+    backgroundColor: theme.colors.surface,
+  },
+  modalHeaderBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: theme.spacing.lg,
+    paddingVertical: theme.spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: theme.colors.border,
+  },
+  modalHeaderButton: {
+    padding: theme.spacing.xs,
+  },
+  modalHeaderTitle: {
+    flex: 1,
+    textAlign: "center",
+    fontSize: 18,
+    fontWeight: "700",
+    color: theme.colors.text,
+  },
+  modalHeaderSpacer: {
+    width: 24,
+  },
+  modalBody: {
+    flex: 1,
+    paddingHorizontal: theme.spacing.lg,
+  },
+  modalBodyContent: {
+    paddingBottom: theme.spacing.xl,
+    paddingTop: theme.spacing.lg,
   },
   logoutButton: {
     flexDirection: "row",
