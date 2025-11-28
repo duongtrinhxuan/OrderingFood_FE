@@ -82,11 +82,13 @@ const RestaurantTabNavigator: React.FC<RestaurantTabNavigatorProps> = ({
         name="Dashboard"
         component={RestaurantDashboardScreen}
         options={{ title: "Tổng quan" }}
+        initialParams={{ restaurantId }}
       />
       <Tab.Screen
         name="Orders"
         component={OrdersManagementScreen}
         options={{ title: "Đơn hàng" }}
+        initialParams={{ restaurantId }}
       />
       <Tab.Screen name="Menu" options={{ title: "Thực đơn" }}>
         {(props) => (
@@ -97,11 +99,13 @@ const RestaurantTabNavigator: React.FC<RestaurantTabNavigatorProps> = ({
         name="Revenue"
         component={RevenueScreen}
         options={{ title: "Doanh thu" }}
+        initialParams={{ restaurantId }}
       />
       <Tab.Screen
         name="Reviews"
         component={ReviewsScreen}
         options={{ title: "Đánh giá" }}
+        initialParams={{ restaurantId }}
       />
       <Tab.Screen name="Profile" options={{ title: "Thông tin" }}>
         {(props) => (
