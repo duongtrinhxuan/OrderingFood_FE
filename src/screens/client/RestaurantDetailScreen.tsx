@@ -9,6 +9,7 @@ import {
   Image,
   ActivityIndicator,
   Alert,
+  Linking,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import Icon from "react-native-vector-icons/MaterialIcons";
@@ -294,6 +295,43 @@ const RestaurantDetailScreen = () => {
     );
   };
 
+  const handleOpenRestaurantInMaps = () => {
+    if (!restaurant) return;
+
+    // Ưu tiên dùng toạ độ nếu backend có truyền qua
+    const latitude = restaurant.address?.latitude;
+    const longitude = restaurant.address?.longitude;
+
+    let mapsUrl = "";
+
+    if (typeof latitude === "number" && typeof longitude === "number") {
+      mapsUrl = `https://www.google.com/maps/search/?api=1&query=${latitude},${longitude}`;
+    } else {
+      const addressParts = [
+        restaurant.address?.street,
+        restaurant.address?.ward,
+        restaurant.address?.district,
+        restaurant.address?.province,
+      ]
+        .filter(Boolean)
+        .join(", ");
+
+      const query =
+        addressParts && addressParts.trim().length > 0
+          ? encodeURIComponent(addressParts)
+          : encodeURIComponent(restaurant.name || "Restaurant");
+
+      mapsUrl = `https://www.google.com/maps/search/?api=1&query=${query}`;
+    }
+
+    Linking.openURL(mapsUrl).catch(() => {
+      Alert.alert(
+        "Lỗi",
+        "Không thể mở Google Maps. Vui lòng kiểm tra lại kết nối hoặc ứng dụng Maps trên thiết bị."
+      );
+    });
+  };
+
   if (!restaurantId) {
     return (
       <View style={styles.centered}>
@@ -361,6 +399,41 @@ const RestaurantDetailScreen = () => {
                 {(restaurant?.rating || 0).toFixed(1)}
               </Text>
             </View>
+          </View>
+
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Địa chỉ trên Google Maps</Text>
+            <TouchableOpacity
+              style={styles.mapCard}
+              activeOpacity={0.8}
+              onPress={handleOpenRestaurantInMaps}
+            >
+              <View style={styles.mapCardIcon}>
+                <Icon name="place" size={24} color={theme.colors.surface} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.mapCardTitle}>
+                  {restaurant?.name || "Nhà hàng"}
+                </Text>
+                <Text style={styles.mapCardAddress} numberOfLines={2}>
+                  {restaurant?.address
+                    ? [
+                        restaurant.address.street,
+                        restaurant.address.ward,
+                        restaurant.address.district,
+                        restaurant.address.province,
+                      ]
+                        .filter(Boolean)
+                        .join(", ")
+                    : "Chạm để xem vị trí trên Google Maps"}
+                </Text>
+              </View>
+              <Icon
+                name="chevron-right"
+                size={24}
+                color={theme.colors.mediumGray}
+              />
+            </TouchableOpacity>
           </View>
 
           <View style={styles.section}>
@@ -496,6 +569,33 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     color: theme.colors.text,
     marginBottom: theme.spacing.md,
+  },
+  mapCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: theme.colors.surface,
+    borderRadius: theme.roundness,
+    padding: theme.spacing.md,
+    ...theme.shadows.small,
+  },
+  mapCardIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: theme.colors.primary,
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: theme.spacing.md,
+  },
+  mapCardTitle: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: theme.colors.text,
+    marginBottom: theme.spacing.xs,
+  },
+  mapCardAddress: {
+    fontSize: 13,
+    color: theme.colors.mediumGray,
   },
   menuGroupCard: {
     backgroundColor: theme.colors.surface,

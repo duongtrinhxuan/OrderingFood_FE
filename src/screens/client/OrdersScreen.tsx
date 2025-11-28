@@ -40,6 +40,11 @@ interface Order {
   };
   orderDetails?: OrderDetail[];
   feedbacks?: OrderFeedback[];
+  payments?: {
+    id: number;
+    paymentMethod?: string;
+    status?: number;
+  }[];
 }
 
 const STATUS_FILTERS = [
@@ -159,6 +164,17 @@ const OrdersScreen = () => {
     const orderDetails = item.orderDetails || [];
     const existingFeedback = item.feedbacks?.[0];
 
+    let paymentStatusText: string | null = null;
+    if (item.status === 4 && item.payments && item.payments.length > 0) {
+      const hasPaid = item.payments.some((p) => p && p.status === 2);
+      const allPending = item.payments.every((p) => p && p.status === 1);
+      if (hasPaid) {
+        paymentStatusText = "Đã thanh toán";
+      } else if (allPending) {
+        paymentStatusText = "Chưa thanh toán";
+      }
+    }
+
     return (
       <TouchableOpacity
         style={styles.orderCard}
@@ -222,6 +238,34 @@ const OrdersScreen = () => {
           </View>
           <Text style={styles.orderTotal}>{formatPrice(orderTotal)}</Text>
         </View>
+
+        {paymentStatusText && (
+          <View style={styles.paymentStatusRow}>
+            <Icon
+              name={
+                paymentStatusText === "Đã thanh toán"
+                  ? "check-circle"
+                  : "payment"
+              }
+              size={16}
+              color={
+                paymentStatusText === "Đã thanh toán"
+                  ? theme.colors.success
+                  : theme.colors.warning
+              }
+            />
+            <Text
+              style={[
+                styles.paymentStatusText,
+                paymentStatusText === "Đã thanh toán"
+                  ? { color: theme.colors.success }
+                  : { color: theme.colors.warning },
+              ]}
+            >
+              {paymentStatusText}
+            </Text>
+          </View>
+        )}
 
         {item.status === 4 ? (
           <TouchableOpacity
@@ -483,6 +527,16 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "bold",
     color: theme.colors.primary,
+  },
+  paymentStatusRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: theme.spacing.xs,
+  },
+  paymentStatusText: {
+    marginLeft: theme.spacing.xs,
+    fontSize: 12,
+    fontWeight: "600",
   },
   emptyContainer: {
     flex: 1,

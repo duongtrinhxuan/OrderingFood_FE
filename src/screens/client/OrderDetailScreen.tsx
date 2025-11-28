@@ -119,7 +119,29 @@ const OrderDetailScreen = () => {
     if (!order?.payments || order.payments.length === 0) {
       return "Không có thông tin";
     }
-    return order.payments[0].paymentMethod || "Không có thông tin";
+    const latestPayment = order.payments.reduce((latest, current) => {
+      if (!current) return latest;
+      if (!latest) return current;
+      const latestTime = (latest as any).createdAt
+        ? new Date((latest as any).createdAt).getTime()
+        : 0;
+      const currentTime = (current as any).createdAt
+        ? new Date((current as any).createdAt).getTime()
+        : 0;
+      return currentTime > latestTime ? current : latest;
+    }, null as any);
+    return latestPayment?.paymentMethod || "Không có thông tin";
+  };
+
+  const getPaymentStatusText = () => {
+    if (!order || order.status !== 4 || !order.payments?.length) {
+      return null;
+    }
+    const hasPaid = order.payments.some((p) => p && p.status === 2);
+    const allPending = order.payments.every((p) => p && p.status === 1);
+    if (hasPaid) return "Đã thanh toán";
+    if (allPending) return "Chưa thanh toán";
+    return null;
   };
 
   const handleDeleteFeedback = () => {
@@ -173,6 +195,7 @@ const OrderDetailScreen = () => {
   const subtotal = order.totalPrice;
   const shippingFee = order.shippingFee || 0;
   const total = subtotal + shippingFee;
+  const paymentStatusText = getPaymentStatusText();
 
   return (
     <View style={styles.container}>
@@ -389,6 +412,35 @@ const OrderDetailScreen = () => {
           <View style={styles.infoCard}>
             <Text style={styles.infoValue}>{getPaymentMethod()}</Text>
           </View>
+          {paymentStatusText && (
+            <View style={[styles.infoCard, styles.paymentStatusCard]}>
+              <View style={styles.paymentStatusRow}>
+                <Icon
+                  name={
+                    paymentStatusText === "Đã thanh toán"
+                      ? "check-circle"
+                      : "payment"
+                  }
+                  size={18}
+                  color={
+                    paymentStatusText === "Đã thanh toán"
+                      ? theme.colors.success
+                      : theme.colors.warning
+                  }
+                />
+                <Text
+                  style={[
+                    styles.paymentStatusText,
+                    paymentStatusText === "Đã thanh toán"
+                      ? { color: theme.colors.success }
+                      : { color: theme.colors.warning },
+                  ]}
+                >
+                  Trạng thái thanh toán: {paymentStatusText}
+                </Text>
+              </View>
+            </View>
+          )}
         </View>
 
         {/* Summary */}
@@ -678,6 +730,18 @@ const styles = StyleSheet.create({
   infoValue: {
     fontSize: 16,
     color: theme.colors.text,
+  },
+  paymentStatusCard: {
+    marginTop: theme.spacing.xs,
+  },
+  paymentStatusRow: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  paymentStatusText: {
+    marginLeft: theme.spacing.xs,
+    fontSize: 14,
+    fontWeight: "600",
   },
   summaryRow: {
     flexDirection: "row",
