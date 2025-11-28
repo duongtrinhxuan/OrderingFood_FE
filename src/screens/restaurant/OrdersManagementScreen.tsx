@@ -8,6 +8,8 @@ import {
   RefreshControl,
   ActivityIndicator,
   Modal,
+  Image,
+  ScrollView,
 } from "react-native";
 import Icon from "react-native-vector-icons/MaterialIcons";
 import { theme } from "../../theme/theme";
@@ -45,6 +47,7 @@ interface Order {
   user?: {
     username: string;
     phone?: string;
+    avatar?: string;
   };
   address?: {
     street?: string;
@@ -53,6 +56,22 @@ interface Order {
     province?: string;
   };
   orderDetails?: OrderDetail[];
+  discount?: {
+    code?: string;
+    percent?: number;
+  };
+  payments?: {
+    id: number;
+    paymentMethod?: string;
+    status?: number;
+  }[];
+  feedbacks?: {
+    id: number;
+    rating: number;
+    content?: string;
+    imageUrl?: string;
+    createdAt?: string;
+  }[];
 }
 
 const STATUS_FILTERS = [
@@ -103,6 +122,8 @@ const OrdersManagementScreen: React.FC<
     number | null
   >(null);
   const [updatingStatus, setUpdatingStatus] = useState(false);
+  const [detailModalVisible, setDetailModalVisible] = useState(false);
+  const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
 
   useEffect(() => {
     setCurrentRestaurantId(restaurantId ?? routeRestaurantId ?? null);
@@ -147,7 +168,16 @@ const OrdersManagementScreen: React.FC<
         currentRestaurantId,
         statusFilter
       );
-      setOrders((data as Order[]) || []);
+      const orderList = (data as Order[]) || [];
+      setOrders(orderList);
+      if (selectedOrder) {
+        const updatedDetail = orderList.find(
+          (order) => order.id === selectedOrder.id
+        );
+        if (updatedDetail) {
+          setSelectedOrder(updatedDetail);
+        }
+      }
     } catch (error) {
       console.error("Error loading orders:", error);
       setOrders([]);
@@ -155,7 +185,7 @@ const OrdersManagementScreen: React.FC<
       setLoading(false);
       setRefreshing(false);
     }
-  }, [currentRestaurantId, selectedStatus]);
+  }, [currentRestaurantId, selectedStatus, selectedOrder?.id]);
 
   useEffect(() => {
     loadOrders();
@@ -204,11 +234,20 @@ const OrdersManagementScreen: React.FC<
     }
   };
 
-  const formatPrice = (price: number) => {
-    return new Intl.NumberFormat("vi-VN", {
-      style: "currency",
-      currency: "VND",
-    }).format(price);
+  const handleOpenOrderDetail = (order: Order) => {
+    setSelectedOrder(order);
+    setDetailModalVisible(true);
+  };
+
+  const handleCloseOrderDetail = () => {
+    setDetailModalVisible(false);
+    setSelectedOrder(null);
+  };
+
+  const handleUpdateStatusFromDetail = () => {
+    if (selectedOrder) {
+      handleOpenStatusModal(selectedOrder);
+    }
   };
 
   const getStatusColor = (status: string) => {
@@ -270,7 +309,11 @@ const OrdersManagementScreen: React.FC<
     const total = (item.totalPrice || 0) + (item.shippingFee || 0);
 
     return (
-      <View style={styles.orderCard}>
+      <TouchableOpacity
+        activeOpacity={0.9}
+        onPress={() => handleOpenOrderDetail(item)}
+        style={styles.orderCard}
+      >
         <View style={styles.orderHeader}>
           <View>
             <Text style={styles.orderId}>#{item.id}</Text>
@@ -336,7 +379,193 @@ const OrdersManagementScreen: React.FC<
             <Text style={styles.updateButtonText}>Cập nhật trạng thái</Text>
           </TouchableOpacity>
         </View>
+      </TouchableOpacity>
+    );
+  };
+
+  const renderFeedbackCard = (order: Order) => {
+    if (order.status !== 4 || !order.feedbacks?.length) {
+      return null;
+    }
+    const feedback = order.feedbacks[0];
+    return (
+      <View style={styles.detailFeedbackCard}>
+        <View style={styles.detailFeedbackHeader}>
+          <Icon name="star" size={16} color={theme.colors.accent} />
+          <Text style={styles.detailFeedbackTitle}>Nhận xét của khách</Text>
+          <Text style={styles.detailFeedbackDate}>
+            {feedback.createdAt ? formatDateTime(feedback.createdAt) : ""}
+          </Text>
+        </View>
+        <Text style={styles.detailFeedbackRating}>{feedback.rating} / 5</Text>
+        {feedback.content ? (
+          <Text style={styles.detailFeedbackText}>{feedback.content}</Text>
+        ) : null}
+        {feedback.imageUrl ? (
+          <Image
+            source={{ uri: feedback.imageUrl }}
+            style={styles.detailFeedbackImage}
+          />
+        ) : null}
       </View>
+    );
+  };
+
+  const renderOrderDetailModal = () => {
+    if (!selectedOrder) return null;
+
+    const addressText = getAddressText(selectedOrder);
+    const total =
+      (selectedOrder.totalPrice || 0) + (selectedOrder.shippingFee || 0);
+    const paymentMethod =
+      selectedOrder.payments?.[0]?.paymentMethod || "Chưa cập nhật";
+    const discountText = selectedOrder.discount?.code
+      ? `${selectedOrder.discount.code}${
+          selectedOrder.discount.percent
+            ? ` - ${selectedOrder.discount.percent}%`
+            : ""
+        }`
+      : "Không áp dụng";
+    const statusInfo = getStatusInfo(selectedOrder.status);
+
+    return (
+      <Modal
+        visible={detailModalVisible}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={handleCloseOrderDetail}
+      >
+        <View style={styles.detailModalScreen}>
+          <View style={styles.detailModalHeader}>
+            <TouchableOpacity
+              style={styles.detailModalBackButton}
+              onPress={handleCloseOrderDetail}
+            >
+              <Icon name="arrow-back" size={24} color={theme.colors.text} />
+            </TouchableOpacity>
+            <Text style={styles.detailModalTitle}>
+              Đơn hàng #{selectedOrder.id}
+            </Text>
+            <View style={{ width: 24 }} />
+          </View>
+
+          <ScrollView
+            style={styles.detailModalBody}
+            contentContainerStyle={{ paddingBottom: theme.spacing.xl }}
+            showsVerticalScrollIndicator={false}
+          >
+            <View style={styles.detailSection}>
+              <Text style={styles.detailSectionTitle}>
+                Thông tin khách hàng
+              </Text>
+              <View style={styles.detailCustomerRow}>
+                <Image
+                  source={{
+                    uri:
+                      selectedOrder.user?.avatar ||
+                      "https://images.unsplash.com/photo-1521572267360-ee0c2909d518?fit=crop&w=200&h=200",
+                  }}
+                  style={styles.detailAvatar}
+                />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.detailCustomerName}>
+                    {selectedOrder.user?.username || "Khách hàng"}
+                  </Text>
+                  <Text style={styles.detailCustomerContact}>
+                    {selectedOrder.user?.phone || "Không có số điện thoại"}
+                  </Text>
+                </View>
+                <View
+                  style={[
+                    styles.detailStatusBadge,
+                    { backgroundColor: statusInfo.color },
+                  ]}
+                >
+                  <Text style={styles.detailStatusText}>
+                    {statusInfo.label}
+                  </Text>
+                </View>
+              </View>
+              <View style={styles.detailInfoRow}>
+                <Icon name="place" size={16} color={theme.colors.mediumGray} />
+                <Text style={styles.detailInfoText}>{addressText}</Text>
+              </View>
+              <View style={styles.detailInfoRow}>
+                <Icon
+                  name="schedule"
+                  size={16}
+                  color={theme.colors.mediumGray}
+                />
+                <Text style={styles.detailInfoText}>
+                  {formatDateTime(selectedOrder.createdAt)}
+                </Text>
+              </View>
+            </View>
+
+            <View style={styles.detailSection}>
+              <Text style={styles.detailSectionTitle}>Chi tiết đơn hàng</Text>
+              {selectedOrder.orderDetails?.map((item) => (
+                <View key={item.id} style={styles.detailItemRow}>
+                  <Text style={styles.detailItemName}>
+                    {item.quantity} x {item.product?.name || "Món ăn"}
+                  </Text>
+                  <Text style={styles.detailItemPrice}>
+                    {formatPrice(
+                      (item.product?.price || 0) * (item.quantity || 0)
+                    )}
+                  </Text>
+                </View>
+              ))}
+              <View style={styles.detailSummaryRow}>
+                <Text style={styles.detailSummaryLabel}>Phí giao hàng</Text>
+                <Text style={styles.detailSummaryValue}>
+                  {formatPrice(selectedOrder.shippingFee || 0)}
+                </Text>
+              </View>
+              <View style={styles.detailSummaryRow}>
+                <Text style={styles.detailSummaryLabel}>Mã giảm giá</Text>
+                <Text style={styles.detailSummaryValue}>{discountText}</Text>
+              </View>
+              <View style={styles.detailSummaryRow}>
+                <Text style={styles.detailSummaryLabel}>
+                  Phương thức thanh toán
+                </Text>
+                <Text style={styles.detailSummaryValue}>{paymentMethod}</Text>
+              </View>
+              <View
+                style={[styles.detailSummaryRow, styles.detailSummaryTotal]}
+              >
+                <Text style={styles.detailSummaryLabel}>Tổng cộng</Text>
+                <Text style={styles.detailSummaryTotalValue}>
+                  {formatPrice(total)}
+                </Text>
+              </View>
+              {selectedOrder.note ? (
+                <Text style={styles.detailNote}>
+                  Ghi chú: {selectedOrder.note}
+                </Text>
+              ) : null}
+            </View>
+
+            {renderFeedbackCard(selectedOrder)}
+
+            <TouchableOpacity
+              style={styles.detailPrimaryButton}
+              onPress={handleUpdateStatusFromDetail}
+            >
+              <Icon
+                name="sync"
+                size={18}
+                color={theme.colors.surface}
+                style={{ marginRight: theme.spacing.xs }}
+              />
+              <Text style={styles.detailPrimaryButtonText}>
+                Cập nhật trạng thái
+              </Text>
+            </TouchableOpacity>
+          </ScrollView>
+        </View>
+      </Modal>
     );
   };
 
@@ -383,6 +612,8 @@ const OrdersManagementScreen: React.FC<
           </View>
         }
       />
+
+      {renderOrderDetailModal()}
 
       <Modal
         visible={statusModalVisible}
@@ -663,6 +894,190 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "bold",
     color: theme.colors.text,
+  },
+  detailModalScreen: {
+    flex: 1,
+    backgroundColor: theme.colors.surface,
+  },
+  detailModalHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: theme.spacing.lg,
+    paddingVertical: theme.spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: theme.colors.border,
+  },
+  detailModalBackButton: {
+    padding: theme.spacing.xs,
+  },
+  detailModalTitle: {
+    flex: 1,
+    textAlign: "center",
+    fontSize: 18,
+    fontWeight: "700",
+    color: theme.colors.text,
+  },
+  detailModalBody: {
+    flex: 1,
+    paddingHorizontal: theme.spacing.lg,
+    paddingTop: theme.spacing.lg,
+  },
+  detailSection: {
+    backgroundColor: theme.colors.surface,
+    borderRadius: theme.roundness,
+    padding: theme.spacing.md,
+    marginBottom: theme.spacing.lg,
+    ...theme.shadows.small,
+  },
+  detailSectionTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: theme.colors.text,
+    marginBottom: theme.spacing.sm,
+  },
+  detailCustomerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: theme.spacing.md,
+  },
+  detailAvatar: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    marginRight: theme.spacing.md,
+    backgroundColor: theme.colors.lightOrange,
+  },
+  detailCustomerName: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: theme.colors.text,
+  },
+  detailCustomerContact: {
+    fontSize: 12,
+    color: theme.colors.mediumGray,
+    marginTop: theme.spacing.xs,
+  },
+  detailStatusBadge: {
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: theme.spacing.xs,
+    borderRadius: theme.roundness,
+  },
+  detailStatusText: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: theme.colors.surface,
+  },
+  detailInfoRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: theme.spacing.xs,
+  },
+  detailInfoText: {
+    fontSize: 13,
+    color: theme.colors.mediumGray,
+    marginLeft: theme.spacing.sm,
+    flex: 1,
+  },
+  detailItemRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: theme.spacing.xs,
+  },
+  detailItemName: {
+    fontSize: 14,
+    color: theme.colors.text,
+    flex: 1,
+  },
+  detailItemPrice: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: theme.colors.text,
+  },
+  detailSummaryRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginTop: theme.spacing.xs,
+  },
+  detailSummaryLabel: {
+    fontSize: 13,
+    color: theme.colors.mediumGray,
+  },
+  detailSummaryValue: {
+    fontSize: 13,
+    color: theme.colors.text,
+    fontWeight: "600",
+  },
+  detailSummaryTotal: {
+    marginTop: theme.spacing.sm,
+    paddingTop: theme.spacing.sm,
+    borderTopWidth: 1,
+    borderTopColor: theme.colors.border,
+  },
+  detailSummaryTotalValue: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: theme.colors.primary,
+  },
+  detailNote: {
+    marginTop: theme.spacing.sm,
+    fontSize: 13,
+    color: theme.colors.mediumGray,
+    fontStyle: "italic",
+  },
+  detailPrimaryButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: theme.colors.primary,
+    borderRadius: theme.roundness,
+    paddingVertical: theme.spacing.md,
+    marginBottom: theme.spacing.md,
+  },
+  detailPrimaryButtonText: {
+    color: theme.colors.surface,
+    fontWeight: "600",
+  },
+  detailFeedbackCard: {
+    backgroundColor: theme.colors.background,
+    borderRadius: theme.roundness,
+    padding: theme.spacing.md,
+    marginBottom: theme.spacing.lg,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+  },
+  detailFeedbackHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: theme.spacing.xs,
+  },
+  detailFeedbackTitle: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: theme.colors.text,
+    marginLeft: theme.spacing.xs,
+    flex: 1,
+  },
+  detailFeedbackDate: {
+    fontSize: 11,
+    color: theme.colors.mediumGray,
+  },
+  detailFeedbackRating: {
+    fontSize: 32,
+    fontWeight: "700",
+    color: theme.colors.accent,
+    marginVertical: theme.spacing.xs,
+  },
+  detailFeedbackText: {
+    fontSize: 13,
+    color: theme.colors.text,
+    marginBottom: theme.spacing.xs,
+    lineHeight: 18,
+  },
+  detailFeedbackImage: {
+    width: "100%",
+    height: 160,
+    borderRadius: theme.roundness,
   },
 });
 
