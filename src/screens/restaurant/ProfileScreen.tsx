@@ -17,6 +17,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { theme } from "../../theme/theme";
 import { useAuth } from "../../context/AuthContext";
 import { api } from "../../services/api";
+import { formatPrice } from "../../utils/helpers";
 import UpdateRestaurantModal from "../../components/UpdateRestaurantModal";
 import UpdateAddressModal from "../../components/UpdateAddressModal";
 import { SellerStackParamList } from "../../navigation/SellerNavigator";
@@ -61,6 +62,11 @@ const RestaurantProfileScreen: React.FC<RestaurantProfileScreenProps> = ({
   const [refreshing, setRefreshing] = useState(false);
   const [showUpdateModal, setShowUpdateModal] = useState(false);
   const [showAddressModal, setShowAddressModal] = useState(false);
+  const [stats, setStats] = useState({
+    totalOrders: 0,
+    monthlyRevenue: 0,
+  });
+  const [statsLoading, setStatsLoading] = useState(false);
 
   const fetchRestaurant = useCallback(async () => {
     if (!restaurantId) {
@@ -92,21 +98,51 @@ const RestaurantProfileScreen: React.FC<RestaurantProfileScreenProps> = ({
       Alert.alert("Lỗi", "Không thể tải thông tin nhà hàng.");
     } finally {
       setLoading(false);
-      setRefreshing(false);
     }
-  }, [restaurantId, refreshing]);
+  }, [restaurantId]);
+
+  const fetchStats = useCallback(async () => {
+    if (!restaurantId) {
+      setStats({ totalOrders: 0, monthlyRevenue: 0 });
+      return;
+    }
+
+    try {
+      setStatsLoading(true);
+      const [ordersData, revenueSummary] = await Promise.all([
+        api.getOrdersByRestaurant(restaurantId),
+        api.getRestaurantRevenueSummary(restaurantId, "month"),
+      ]);
+
+      const totalOrders = Array.isArray(ordersData) ? ordersData.length : 0;
+      const monthlyRevenue = Number((revenueSummary as any)?.totalRevenue ?? 0);
+      setStats({
+        totalOrders,
+        monthlyRevenue: Number.isFinite(monthlyRevenue) ? monthlyRevenue : 0,
+      });
+    } catch (error) {
+      console.error("Error fetching stats:", error);
+      setStats({ totalOrders: 0, monthlyRevenue: 0 });
+    } finally {
+      setStatsLoading(false);
+    }
+  }, [restaurantId]);
 
   useEffect(() => {
     fetchRestaurant();
-  }, [fetchRestaurant]);
+    fetchStats();
+  }, [fetchRestaurant, fetchStats]);
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
-    fetchRestaurant();
-  }, [fetchRestaurant]);
+    Promise.all([fetchRestaurant(), fetchStats()]).finally(() =>
+      setRefreshing(false)
+    );
+  }, [fetchRestaurant, fetchStats]);
 
   const handleUpdateSuccess = () => {
     fetchRestaurant();
+    fetchStats();
   };
 
   const handleBack = () => {
@@ -179,6 +215,17 @@ const RestaurantProfileScreen: React.FC<RestaurantProfileScreenProps> = ({
     </TouchableOpacity>
   );
 
+  const ratingValue =
+    typeof restaurant.rating === "number" && !Number.isNaN(restaurant.rating)
+      ? restaurant.rating
+      : 0;
+  const totalOrdersDisplay = statsLoading
+    ? "..."
+    : stats.totalOrders.toString();
+  const monthlyRevenueDisplay = statsLoading
+    ? "..."
+    : formatPrice(stats.monthlyRevenue);
+
   return (
     <ScrollView
       style={styles.container}
@@ -205,9 +252,7 @@ const RestaurantProfileScreen: React.FC<RestaurantProfileScreenProps> = ({
           <Text style={styles.restaurantName}>{restaurant.name}</Text>
           <View style={styles.infoRow}>
             <Icon name="star" size={16} color={theme.colors.accent} />
-            <Text style={styles.infoText}>
-              {restaurant.rating ? restaurant.rating.toFixed(1) : "Chưa có"}
-            </Text>
+            <Text style={styles.infoText}>{ratingValue.toFixed(1)}</Text>
           </View>
           <View style={styles.infoRow}>
             <Icon name="access-time" size={16} color={theme.colors.surface} />
@@ -227,17 +272,17 @@ const RestaurantProfileScreen: React.FC<RestaurantProfileScreenProps> = ({
       {/* Stats */}
       <View style={styles.statsContainer}>
         <View style={styles.statItem}>
-          <Text style={styles.statNumber}>0</Text>
+          <Text style={styles.statNumber}>{totalOrdersDisplay}</Text>
           <Text style={styles.statLabel}>Tổng đơn hàng</Text>
         </View>
         <View style={styles.statDivider} />
         <View style={styles.statItem}>
-          <Text style={styles.statNumber}>0.0</Text>
+          <Text style={styles.statNumber}>{ratingValue.toFixed(1)}</Text>
           <Text style={styles.statLabel}>Đánh giá TB</Text>
         </View>
         <View style={styles.statDivider} />
         <View style={styles.statItem}>
-          <Text style={styles.statNumber}>0đ</Text>
+          <Text style={styles.statNumber}>{monthlyRevenueDisplay}</Text>
           <Text style={styles.statLabel}>Doanh thu tháng</Text>
         </View>
       </View>
