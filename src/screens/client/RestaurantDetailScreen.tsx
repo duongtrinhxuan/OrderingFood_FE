@@ -222,41 +222,77 @@ const RestaurantDetailScreen = () => {
     </View>
   );
 
-  const renderFeedback = (feedback: any) => (
-    <View key={feedback.id} style={styles.feedbackCard}>
-      <View style={styles.feedbackHeader}>
-        <View>
-          <Text style={styles.feedbackUser}>
-            {feedback.order?.user?.username || "Khách hàng"}
-          </Text>
-          <Text style={styles.feedbackDate}>
-            {feedback.createdAt ? formatDateTime(feedback.createdAt) : ""}
-          </Text>
+  const renderFeedback = (feedback: any) => {
+    const existingResponse =
+      feedback.responses &&
+      Array.isArray(feedback.responses) &&
+      feedback.responses.find((res: any) => res && res.isActive !== false);
+
+    return (
+      <View key={feedback.id} style={styles.feedbackCard}>
+        <View style={styles.feedbackHeader}>
+          <View>
+            <Text style={styles.feedbackUser}>
+              {feedback.order?.user?.username || "Khách hàng"}
+            </Text>
+            <Text style={styles.feedbackDate}>
+              {feedback.createdAt ? formatDateTime(feedback.createdAt) : ""}
+            </Text>
+          </View>
+          <View style={styles.ratingBadge}>
+            <Icon name="star" size={16} color={theme.colors.surface} />
+            <Text style={styles.ratingBadgeText}>{feedback.rating}</Text>
+          </View>
         </View>
-        <View style={styles.ratingBadge}>
-          <Icon name="star" size={16} color={theme.colors.surface} />
-          <Text style={styles.ratingBadgeText}>{feedback.rating}</Text>
-        </View>
+        {feedback.order?.orderDetails?.length ? (
+          <Text style={styles.feedbackItems}>
+            {feedback.order.orderDetails
+              .map(
+                (detail: any) =>
+                  `${detail.product?.name || "Món"} x${detail.quantity || 0}`
+              )
+              .join(", ")}
+          </Text>
+        ) : null}
+        <Text style={styles.feedbackContent}>{feedback.content}</Text>
+        {feedback.imageUrl ? (
+          <Image
+            source={{ uri: feedback.imageUrl }}
+            style={styles.feedbackImage}
+          />
+        ) : null}
+
+        {existingResponse ? (
+          <View style={styles.feedbackResponseWrapper}>
+            <View style={styles.feedbackResponseConnector}>
+              <View style={styles.feedbackResponseDot} />
+              <View style={styles.feedbackResponseLine} />
+            </View>
+            <View style={styles.feedbackResponseCard}>
+              <View style={styles.feedbackResponseHeader}>
+                <Icon
+                  name="restaurant"
+                  size={16}
+                  color={theme.colors.primary}
+                />
+                <Text style={styles.feedbackResponseLabel}>
+                  Phản hồi từ nhà hàng
+                </Text>
+                <Text style={styles.feedbackResponseDate}>
+                  {existingResponse.createdAt
+                    ? formatDateTime(existingResponse.createdAt)
+                    : ""}
+                </Text>
+              </View>
+              <Text style={styles.feedbackResponseText}>
+                {existingResponse.response || "Nhà hàng đã gửi phản hồi."}
+              </Text>
+            </View>
+          </View>
+        ) : null}
       </View>
-      {feedback.order?.orderDetails?.length ? (
-        <Text style={styles.feedbackItems}>
-          {feedback.order.orderDetails
-            .map(
-              (detail: any) =>
-                `${detail.product?.name || "Món"} x${detail.quantity || 0}`
-            )
-            .join(", ")}
-        </Text>
-      ) : null}
-      <Text style={styles.feedbackContent}>{feedback.content}</Text>
-      {feedback.imageUrl ? (
-        <Image
-          source={{ uri: feedback.imageUrl }}
-          style={styles.feedbackImage}
-        />
-      ) : null}
-    </View>
-  );
+    );
+  };
 
   if (!restaurantId) {
     return (
@@ -562,6 +598,56 @@ const styles = StyleSheet.create({
     height: 160,
     borderRadius: theme.roundness,
     marginTop: theme.spacing.sm,
+  },
+  feedbackResponseWrapper: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    marginTop: theme.spacing.sm,
+    columnGap: theme.spacing.sm,
+  },
+  feedbackResponseConnector: {
+    alignItems: "center",
+    width: 18,
+  },
+  feedbackResponseDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: theme.colors.primary,
+    marginBottom: 4,
+  },
+  feedbackResponseLine: {
+    width: 2,
+    height: 24,
+    borderRadius: 1,
+    backgroundColor: theme.colors.border,
+  },
+  feedbackResponseCard: {
+    flex: 1,
+    backgroundColor: theme.colors.lightOrange,
+    borderRadius: theme.roundness,
+    padding: theme.spacing.sm,
+  },
+  feedbackResponseHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: theme.spacing.xs,
+  },
+  feedbackResponseLabel: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: theme.colors.primary,
+    marginLeft: theme.spacing.xs,
+    flex: 1,
+  },
+  feedbackResponseDate: {
+    fontSize: 10,
+    color: theme.colors.mediumGray,
+  },
+  feedbackResponseText: {
+    fontSize: 12,
+    color: theme.colors.text,
+    lineHeight: 16,
   },
   ratingBadge: {
     flexDirection: "row",

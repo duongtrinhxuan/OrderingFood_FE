@@ -400,43 +400,59 @@ const ReviewsScreen = () => {
         ) : null}
 
         {existingResponse ? (
-          <View style={styles.responseContainer}>
-            <View style={styles.responseHeader}>
-              <Icon name="restaurant" size={16} color={theme.colors.primary} />
-              <Text style={styles.responseLabel}>Phản hồi từ nhà hàng</Text>
-              <Text style={styles.responseDate}>
-                {existingResponse.createdAt
-                  ? formatDateTime(existingResponse.createdAt)
-                  : ""}
-              </Text>
-            </View>
-            {existingResponse.imageUrl ? (
-              <Image
-                source={{ uri: existingResponse.imageUrl }}
-                style={styles.responseImage}
+          <View style={styles.responseWrapper}>
+            <View style={styles.responseConnector}>
+              <View style={styles.responseConnectorDot} />
+              <View style={styles.responseConnectorLine} />
+              <Icon
+                name="subdirectory-arrow-right"
+                size={20}
+                color={theme.colors.mediumGray}
+                style={styles.responseConnectorArrow}
               />
-            ) : null}
-            {existingResponse.content ? (
-              <Text style={styles.responseTitle}>
-                {existingResponse.content}
+            </View>
+            <View style={styles.responseContainer}>
+              <View style={styles.responseHeader}>
+                <Icon
+                  name="restaurant"
+                  size={16}
+                  color={theme.colors.primary}
+                />
+                <Text style={styles.responseLabel}>Phản hồi từ nhà hàng</Text>
+                <Text style={styles.responseDate}>
+                  {existingResponse.createdAt
+                    ? formatDateTime(existingResponse.createdAt)
+                    : ""}
+                </Text>
+              </View>
+              {existingResponse.imageUrl ? (
+                <Image
+                  source={{ uri: existingResponse.imageUrl }}
+                  style={styles.responseImage}
+                />
+              ) : null}
+              {existingResponse.content ? (
+                <Text style={styles.responseTitle}>
+                  {existingResponse.content}
+                </Text>
+              ) : null}
+              <Text style={styles.responseText}>
+                {existingResponse.response || "Nhà hàng đã phản hồi."}
               </Text>
-            ) : null}
-            <Text style={styles.responseText}>
-              {existingResponse.response || "Nhà hàng đã phản hồi."}
-            </Text>
-            <View style={styles.responseActions}>
-              <TouchableOpacity
-                style={styles.iconButton}
-                onPress={() => handleToggleResponseForm(item)}
-              >
-                <Icon name="edit" size={18} color={theme.colors.primary} />
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.iconButton}
-                onPress={() => handleDeleteResponse(item)}
-              >
-                <Icon name="delete" size={18} color={theme.colors.error} />
-              </TouchableOpacity>
+              <View style={styles.responseActions}>
+                <TouchableOpacity
+                  style={styles.iconButton}
+                  onPress={() => handleToggleResponseForm(item)}
+                >
+                  <Icon name="edit" size={18} color={theme.colors.primary} />
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.iconButton}
+                  onPress={() => handleDeleteResponse(item)}
+                >
+                  <Icon name="delete" size={18} color={theme.colors.error} />
+                </TouchableOpacity>
+              </View>
             </View>
           </View>
         ) : null}
@@ -850,11 +866,37 @@ const styles = StyleSheet.create({
     borderRadius: theme.roundness,
     marginBottom: theme.spacing.sm,
   },
+  responseWrapper: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    columnGap: theme.spacing.sm,
+    marginBottom: theme.spacing.sm,
+  },
+  responseConnector: {
+    alignItems: "center",
+    width: 24,
+  },
+  responseConnectorDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: theme.colors.primary,
+    marginBottom: 4,
+  },
+  responseConnectorLine: {
+    width: 2,
+    height: 24,
+    backgroundColor: theme.colors.border,
+    borderRadius: 1,
+  },
+  responseConnectorArrow: {
+    marginTop: 4,
+  },
   responseContainer: {
+    flex: 1,
     backgroundColor: theme.colors.lightOrange,
     borderRadius: theme.roundness / 2,
     padding: theme.spacing.md,
-    marginBottom: theme.spacing.sm,
   },
   responseHeader: {
     flexDirection: "row",
