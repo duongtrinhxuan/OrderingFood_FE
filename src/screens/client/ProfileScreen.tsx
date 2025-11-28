@@ -16,12 +16,20 @@ import { useAuth } from "../../context/AuthContext";
 import { api } from "../../services/api";
 import UpdateUserModal from "../../components/UpdateUserModal";
 import ManageAddressModal from "../../components/ManageAddressModal";
+import NotificationsModal, {
+  NotificationRecord,
+} from "../../components/NotificationsModal";
+import { useFocusEffect } from "@react-navigation/native";
 
 const ProfileScreen = () => {
   const { user, setUser, logout } = useAuth();
   const [refreshing, setRefreshing] = useState(false);
   const [showUpdateModal, setShowUpdateModal] = useState(false);
   const [showAddressModal, setShowAddressModal] = useState(false);
+  const [notificationsVisible, setNotificationsVisible] = useState(false);
+  const [notifications, setNotifications] = useState<NotificationRecord[]>([]);
+  const [loadingNotifications, setLoadingNotifications] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
   const handleLogout = () => {
     Alert.alert("Đăng xuất", "Bạn có chắc chắn muốn đăng xuất?", [
       { text: "Hủy", style: "cancel" },
@@ -44,14 +52,68 @@ const ProfileScreen = () => {
     }
   }, [user?.id, setUser]);
 
+  const fetchNotifications = useCallback(async () => {
+    if (!user?.id) {
+      return;
+    }
+
+    try {
+      setLoadingNotifications(true);
+      const data = await api.getNotificationsByReceiver(user.id);
+      if (Array.isArray(data)) {
+        setNotifications(data as NotificationRecord[]);
+        const unread = data.filter(
+          (item: NotificationRecord) => !item.isRead
+        ).length;
+        setUnreadCount(unread);
+      } else {
+        setNotifications([]);
+        setUnreadCount(0);
+      }
+    } catch (error) {
+      console.error("Error fetching notifications:", error);
+    } finally {
+      setLoadingNotifications(false);
+    }
+  }, [user?.id]);
+
   const onRefresh = useCallback(() => {
     setRefreshing(true);
-    fetchUserProfile().finally(() => setRefreshing(false));
-  }, [fetchUserProfile]);
+    Promise.all([fetchUserProfile(), fetchNotifications()]).finally(() =>
+      setRefreshing(false)
+    );
+  }, [fetchUserProfile, fetchNotifications]);
 
   const handleUpdateSuccess = () => {
     fetchUserProfile();
   };
+
+  const handleNotificationPress = useCallback(
+    async (notification: NotificationRecord) => {
+      if (!notification || notification.isRead) {
+        return;
+      }
+      try {
+        await api.markNotificationAsRead(notification.id);
+        await fetchNotifications();
+      } catch (error) {
+        Alert.alert("Lỗi", "Không thể cập nhật trạng thái thông báo.");
+        console.error("Error marking notification as read:", error);
+      }
+    },
+    [fetchNotifications]
+  );
+
+  const handleOpenNotifications = () => {
+    setNotificationsVisible(true);
+    fetchNotifications();
+  };
+
+  useFocusEffect(
+    useCallback(() => {
+      fetchNotifications();
+    }, [fetchNotifications])
+  );
 
   const menuItems = [
     {
@@ -88,7 +150,8 @@ const ProfileScreen = () => {
       id: "6",
       title: "Thông báo",
       icon: "notifications",
-      onPress: () => {},
+      onPress: handleOpenNotifications,
+      badgeCount: unreadCount,
     },
     {
       id: "7",
@@ -119,6 +182,13 @@ const ProfileScreen = () => {
       <View style={styles.menuItemLeft}>
         <View style={styles.menuIconContainer}>
           <Icon name={item.icon} size={24} color={theme.colors.primary} />
+          {item.badgeCount > 0 && (
+            <View style={styles.notificationBadge}>
+              <Text style={styles.notificationBadgeText}>
+                {item.badgeCount > 99 ? "99+" : item.badgeCount}
+              </Text>
+            </View>
+          )}
         </View>
         <Text style={styles.menuItemText}>{item.title}</Text>
       </View>
@@ -129,6 +199,7 @@ const ProfileScreen = () => {
   return (
     <ScrollView
       style={styles.container}
+      contentContainerStyle={styles.scrollContent}
       refreshControl={
         <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
       }
@@ -203,6 +274,15 @@ const ProfileScreen = () => {
           userId={user.id}
         />
       )}
+
+      <NotificationsModal
+        visible={notificationsVisible}
+        onClose={() => setNotificationsVisible(false)}
+        notifications={notifications}
+        loading={loadingNotifications}
+        onRefresh={fetchNotifications}
+        onNotificationPress={handleNotificationPress}
+      />
     </ScrollView>
   );
 };
@@ -319,6 +399,24 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     marginRight: theme.spacing.md,
+    position: "relative",
+  },
+  notificationBadge: {
+    position: "absolute",
+    top: -4,
+    right: -4,
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: theme.colors.error,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 4,
+  },
+  notificationBadgeText: {
+    color: theme.colors.surface,
+    fontSize: 10,
+    fontWeight: "700",
   },
   menuItemText: {
     fontSize: 16,
@@ -351,6 +449,9 @@ const styles = StyleSheet.create({
   versionText: {
     fontSize: 12,
     color: theme.colors.mediumGray,
+  },
+  scrollContent: {
+    paddingBottom: theme.navbarHeight + theme.spacing.md,
   },
 });
 
