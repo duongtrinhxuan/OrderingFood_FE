@@ -100,9 +100,11 @@ const MenuManagementScreen: React.FC<MenuManagementScreenProps> = ({
   const fetchCategories = useCallback(async () => {
     try {
       const data = await api.getProductCategories();
+      // Đảm bảo load tất cả categories (kể cả inactive nếu cần)
       setCategories(data as ProductCategory[]);
     } catch (error: any) {
       console.error("Error fetching categories:", error);
+      Alert.alert("Lỗi", "Không thể tải danh sách danh mục sản phẩm.");
     }
   }, []);
 

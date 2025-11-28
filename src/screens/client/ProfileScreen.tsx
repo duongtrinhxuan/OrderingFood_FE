@@ -54,7 +54,8 @@ const ProfileScreen = () => {
     } catch (error) {
       console.error("Error fetching user profile:", error);
     }
-  }, [user?.id, setUser]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id]);
 
   const fetchNotifications = useCallback(async () => {
     if (!user?.id) {
@@ -114,7 +115,8 @@ const ProfileScreen = () => {
       fetchNotifications(),
       fetchOrderStats(),
     ]).finally(() => setRefreshing(false));
-  }, [fetchUserProfile, fetchNotifications, fetchOrderStats]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id]);
 
   const handleUpdateSuccess = () => {
     fetchUserProfile();
@@ -145,7 +147,8 @@ const ProfileScreen = () => {
     useCallback(() => {
       fetchNotifications();
       fetchOrderStats();
-    }, [fetchNotifications, fetchOrderStats])
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [user?.id])
   );
 
   const handleOpenDiscounts = () => {
@@ -201,13 +204,13 @@ const ProfileScreen = () => {
       <View style={styles.menuItemLeft}>
         <View style={styles.menuIconContainer}>
           <Icon name={item.icon} size={24} color={theme.colors.primary} />
-          {item.badgeCount && item.badgeCount > 0 && (
+          {item.badgeCount && item.badgeCount > 0 ? (
             <View style={styles.notificationBadge}>
               <Text style={styles.notificationBadgeText}>
-                {item.badgeCount > 99 ? "99+" : item.badgeCount}
+                {item.badgeCount > 99 ? "99+" : item.badgeCount.toString()}
               </Text>
             </View>
-          )}
+          ) : null}
         </View>
         <Text style={styles.menuItemText}>{item.title}</Text>
       </View>
@@ -240,7 +243,7 @@ const ProfileScreen = () => {
             />
           </View>
           <Text style={styles.userName}>{user?.username || "Người dùng"}</Text>
-          <Text style={styles.userEmail}>{user?.email}</Text>
+          <Text style={styles.userEmail}>{user?.email || ""}</Text>
           <Text style={styles.userPhone}>{user?.phone || "Chưa cập nhật"}</Text>
         </View>
       </LinearGradient>

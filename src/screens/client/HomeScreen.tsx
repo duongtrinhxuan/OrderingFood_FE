@@ -104,7 +104,10 @@ const HomeScreen = () => {
   // Load user default address
   useEffect(() => {
     const loadUserAddress = async () => {
-      if (!user?.id) return;
+      if (!user?.id) {
+        setUserDefaultAddress(null);
+        return;
+      }
 
       try {
         const userAddresses = await api.getUserAddresses(user.id);
@@ -112,13 +115,26 @@ const HomeScreen = () => {
           (ua: any) => ua.address?.isDefault
         );
         if (defaultAddress?.address) {
-          setUserDefaultAddress({
+          const newAddress = {
             latitude: defaultAddress.address.latitude,
             longitude: defaultAddress.address.longitude,
+          };
+          // Chỉ update nếu giá trị thay đổi
+          setUserDefaultAddress((prev) => {
+            if (
+              prev?.latitude === newAddress.latitude &&
+              prev?.longitude === newAddress.longitude
+            ) {
+              return prev;
+            }
+            return newAddress;
           });
+        } else {
+          setUserDefaultAddress(null);
         }
       } catch (error) {
         console.error("Error loading user address:", error);
+        setUserDefaultAddress(null);
       }
     };
 

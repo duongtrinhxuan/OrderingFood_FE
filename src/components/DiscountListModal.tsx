@@ -53,7 +53,8 @@ const DiscountListModal: React.FC<DiscountListModalProps> = ({
     if (visible) {
       loadDiscounts();
     }
-  }, [visible, loadDiscounts]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visible]);
 
   const renderDiscount = ({ item }: { item: DiscountRecord }) => (
     <View style={styles.card}>
