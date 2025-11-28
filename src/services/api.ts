@@ -15,13 +15,17 @@ const resolveApiBaseUrl = () => {
 
   if (hostUri) {
     const host = hostUri.split(":")[0];
-    return `http://${host}:3000`;
+    return `http://${host}:5000`;
   }
 
-  return "http://192.168.1.9:5000";
+  // Fallback: thử detect IP từ network interface hoặc dùng localhost
+  return "http://localhost:5000";
 };
 
 const API_BASE_URL = resolveApiBaseUrl();
+
+// Export API_BASE_URL để các file khác có thể sử dụng
+export { API_BASE_URL };
 
 async function request<T>(
   path: string,
@@ -41,7 +45,21 @@ async function request<T>(
     throw new Error(errorText || "Đã xảy ra lỗi, vui lòng thử lại.");
   }
 
-  return response.json();
+  // Nếu response status là 204 (No Content), không có body để parse
+  if (response.status === 204) {
+    return undefined as T;
+  }
+
+  // Kiểm tra xem response có content không
+  const contentType = response.headers.get("content-type");
+  if (contentType && contentType.includes("application/json")) {
+    const text = await response.text();
+    if (text && text.trim().length > 0) {
+      return JSON.parse(text);
+    }
+  }
+
+  return undefined as T;
 }
 
 export interface LoginPayload {
@@ -240,6 +258,18 @@ export const api = {
   }) {
     return request("/menus", "POST", payload);
   },
+  updateMenu(
+    menuId: number,
+    payload: {
+      name?: string;
+      isActive?: boolean;
+    }
+  ) {
+    return request(`/menus/${menuId}`, "PATCH", payload);
+  },
+  deleteMenu(menuId: number) {
+    return request(`/menus/${menuId}`, "DELETE");
+  },
   // Product APIs
   getProductsByRestaurant(restaurantId: number) {
     return request(`/products/restaurant/${restaurantId}`, "GET");
@@ -311,5 +341,200 @@ export const api = {
       "PATCH",
       { isActive }
     );
+  },
+  // Discount APIs
+  getDiscounts() {
+    return request("/discounts", "GET");
+  },
+  getOrdersByUser(userId: number, status?: number) {
+    const query = status ? `?status=${status}` : "";
+    return request(`/orders/user/${userId}/orders${query}`, "GET");
+  },
+  getOrderById(orderId: number) {
+    return request(`/orders/${orderId}`, "GET");
+  },
+  getOrdersByRestaurant(restaurantId: number, status?: number) {
+    const query = status ? `?status=${status}` : "";
+    return request(`/orders/restaurant/${restaurantId}/orders${query}`, "GET");
+  },
+  updateOrder(
+    orderId: number,
+    payload: {
+      status?: number;
+      note?: string;
+    }
+  ) {
+    return request(`/orders/${orderId}`, "PATCH", payload);
+  },
+  getNotificationsByReceiver(userId: number) {
+    return request(`/notifications/receiver/${userId}`, "GET");
+  },
+  markNotificationAsRead(notificationId: number) {
+    return request(`/notifications/${notificationId}/read`, "PATCH", {});
+  },
+  getRestaurantRevenueSummary(restaurantId: number, period: string) {
+    const params = new URLSearchParams();
+    if (period) {
+      params.append("period", period);
+    }
+    const query = params.toString();
+    return request(
+      `/revenue-reports/restaurant/${restaurantId}/summary${
+        query ? `?${query}` : ""
+      }`,
+      "GET"
+    );
+  },
+  getRestaurantDashboardSummary(restaurantId: number) {
+    return request(
+      `/restaurant-dashboard/restaurant/${restaurantId}/summary`,
+      "GET"
+    );
+  },
+  // Feedback APIs
+  getFeedbackByOrder(orderId: number) {
+    return request(`/feedbacks/order/${orderId}`, "GET");
+  },
+  getFeedbacksByRestaurant(restaurantId: number, rating?: number) {
+    const query = rating ? `?rating=${rating}` : "";
+    return request(`/feedbacks/restaurant/${restaurantId}${query}`, "GET");
+  },
+  createFeedback(payload: {
+    orderId: number;
+    rating: number;
+    content: string;
+    imageUrl?: string;
+  }) {
+    return request("/feedbacks", "POST", payload);
+  },
+  updateFeedback(
+    feedbackId: number,
+    payload: {
+      rating?: number;
+      content?: string;
+      imageUrl?: string;
+    }
+  ) {
+    return request(`/feedbacks/${feedbackId}`, "PATCH", payload);
+  },
+  deleteFeedback(feedbackId: number) {
+    return request(`/feedbacks/${feedbackId}`, "DELETE");
+  },
+  // Response APIs
+  createResponse(payload: {
+    sentId: number;
+    feedbackId: number;
+    content?: string;
+    imageUrl?: string;
+    response?: string;
+  }) {
+    return request("/responses", "POST", payload);
+  },
+  updateResponse(
+    responseId: number,
+    payload: {
+      content?: string;
+      imageUrl?: string;
+      response?: string;
+    }
+  ) {
+    return request(`/responses/${responseId}`, "PATCH", payload);
+  },
+  deleteResponse(responseId: number) {
+    return request(`/responses/${responseId}`, "DELETE");
+  },
+  // Search APIs
+  searchProducts(query?: string, categoryIds?: number[]) {
+    const params = new URLSearchParams();
+    if (query) params.append("q", query);
+    if (categoryIds && categoryIds.length > 0) {
+      params.append("categoryIds", categoryIds.join(","));
+    }
+    return request(`/products/search?${params.toString()}`, "GET");
+  },
+  searchRestaurants(query?: string, categoryIds?: number[]) {
+    const params = new URLSearchParams();
+    if (query) params.append("q", query);
+    if (categoryIds && categoryIds.length > 0) {
+      params.append("categoryIds", categoryIds.join(","));
+    }
+    return request(`/restaurants/search?${params.toString()}`, "GET");
+  },
+  // Get popular products (top 5)
+  getPopularProducts() {
+    return request("/products/popular", "GET");
+  },
+  // Get all products (tạm thời lấy tất cả, có thể thêm pagination sau)
+  getAllProducts(page: number = 1, limit: number = 5) {
+    return request("/products", "GET");
+  },
+  // Get all restaurants (tạm thời lấy tất cả, có thể thêm pagination sau)
+  getAllRestaurants(page: number = 1, limit: number = 5) {
+    return request("/restaurants", "GET");
+  },
+  // Cart APIs
+  getCartByUser(userId: number) {
+    return request(`/carts/user/${userId}`, "GET");
+  },
+  getOrCreateUserCart(userId: number) {
+    return request(`/carts/user/${userId}/get-or-create`, "GET");
+  },
+  // Cart Item APIs
+  getCartItemsByCart(cartId: number) {
+    return request(`/cart-items/cart/${cartId}`, "GET");
+  },
+  createCartItem(payload: {
+    cartId: number;
+    productId: number;
+    quantity?: number;
+    unitPrice?: number;
+  }) {
+    return request("/cart-items", "POST", payload);
+  },
+  updateCartItem(
+    cartItemId: number,
+    payload: {
+      quantity?: number;
+      unitPrice?: number;
+      isActive?: boolean;
+    }
+  ) {
+    return request(`/cart-items/${cartItemId}`, "PATCH", payload);
+  },
+  deleteCartItem(cartItemId: number) {
+    return request(`/cart-items/${cartItemId}`, "DELETE");
+  },
+  getCartItemByCartAndProduct(cartId: number, productId: number) {
+    return request(`/cart-items/cart/${cartId}/product/${productId}`, "GET");
+  },
+  // Order APIs
+  createOrder(payload: {
+    totalPrice: number;
+    status: number;
+    shippingFee: number;
+    note?: string;
+    userId: number;
+    restaurantId: number;
+    addressId: number;
+    discountId?: number;
+  }) {
+    return request("/orders", "POST", payload);
+  },
+  // Order Detail APIs
+  createOrderDetail(payload: {
+    quantity: number;
+    note?: string;
+    productId: number;
+    orderId: number;
+  }) {
+    return request("/order-details", "POST", payload);
+  },
+  // Payment APIs
+  createPayment(payload: {
+    paymentMethod: string;
+    status: number;
+    orderId: number;
+  }) {
+    return request("/payments", "POST", payload);
   },
 };
