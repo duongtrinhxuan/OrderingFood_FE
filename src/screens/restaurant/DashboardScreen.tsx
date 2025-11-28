@@ -1,106 +1,227 @@
-import React from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import {
   View,
   Text,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
+  ActivityIndicator,
 } from "react-native";
 import Icon from "react-native-vector-icons/MaterialIcons";
 import { LinearGradient } from "expo-linear-gradient";
 import { theme } from "../../theme/theme";
+import { useNavigation, useRoute } from "@react-navigation/native";
+import { useAuth } from "../../context/AuthContext";
+import { api } from "../../services/api";
+import { formatPrice, formatDateTime } from "../../utils/helpers";
 
-const DashboardScreen = () => {
-  const stats = [
+interface DashboardScreenProps {
+  restaurantId?: number;
+}
+
+type DashboardScreenComponentProps = DashboardScreenProps & {
+  route?: any;
+  navigation?: any;
+};
+
+interface OrderDetail {
+  id: number;
+  quantity: number;
+  product?: { id: number; name: string };
+}
+
+interface Order {
+  id: number;
+  status: number;
+  totalPrice: number;
+  shippingFee: number;
+  createdAt: string;
+  user?: { id: number; username: string };
+  orderDetails?: OrderDetail[];
+}
+
+const ORDER_STATUS_MAP: Record<number, { label: string; color: string }> = {
+  1: { label: "Đang xử lý", color: theme.colors.warning },
+  2: { label: "Đã xác nhận", color: theme.colors.info },
+  3: { label: "Đang giao", color: theme.colors.primary },
+  4: { label: "Hoàn thành", color: theme.colors.success },
+  5: { label: "Đã hủy", color: theme.colors.error },
+};
+
+const DashboardScreen: React.FC<DashboardScreenComponentProps> = ({
+  restaurantId,
+}) => {
+  const navigation = useNavigation();
+  const route = useRoute<any>();
+  const routeRestaurantId = route?.params?.restaurantId;
+  const { user } = useAuth();
+  const [currentRestaurantId, setCurrentRestaurantId] = useState<number | null>(
+    restaurantId ?? routeRestaurantId ?? null
+  );
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [dashboardStats, setDashboardStats] = useState<{
+    ordersToday: number;
+    ordersChange: number;
+    revenueToday: number;
+    revenueChange: number;
+    customersToday: number;
+    customersChange: number;
+  } | null>(null);
+  const [statsLoading, setStatsLoading] = useState(false);
+  const [restaurantInfo, setRestaurantInfo] = useState<any>(null);
+
+  const fetchRestaurant = useCallback(async () => {
+    if (restaurantId || !user?.id) return;
+    try {
+      const data = await api.getRestaurantsByOwner(user.id);
+      const restaurants = data as any[];
+      if (restaurants && restaurants.length > 0) {
+        setCurrentRestaurantId(restaurants[0].id);
+      } else {
+        setCurrentRestaurantId(null);
+      }
+    } catch (error) {
+      console.error("Error loading restaurant:", error);
+      setCurrentRestaurantId(null);
+    }
+  }, [restaurantId, user?.id]);
+
+  useEffect(() => {
+    setCurrentRestaurantId(restaurantId ?? routeRestaurantId ?? null);
+  }, [restaurantId, routeRestaurantId]);
+
+  useEffect(() => {
+    if (!restaurantId && !routeRestaurantId) {
+      fetchRestaurant();
+    }
+  }, [fetchRestaurant, restaurantId, routeRestaurantId]);
+
+  const loadOrders = useCallback(async () => {
+    if (!currentRestaurantId) {
+      setOrders([]);
+      setLoading(false);
+      return;
+    }
+    try {
+      setLoading(true);
+      const data = await api.getOrdersByRestaurant(currentRestaurantId);
+      const orderData = (data as Order[]) || [];
+      setOrders(orderData);
+    } catch (error) {
+      console.error("Error loading orders:", error);
+      setOrders([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [currentRestaurantId]);
+
+  useEffect(() => {
+    loadOrders();
+  }, [loadOrders]);
+
+  const loadRestaurantInfo = useCallback(async () => {
+    if (!currentRestaurantId) {
+      setRestaurantInfo(null);
+      return;
+    }
+    try {
+      const data = await api.getRestaurantById(currentRestaurantId);
+      setRestaurantInfo(data);
+    } catch (error) {
+      console.error("Error loading restaurant info:", error);
+      setRestaurantInfo(null);
+    }
+  }, [currentRestaurantId]);
+
+  useEffect(() => {
+    loadRestaurantInfo();
+  }, [loadRestaurantInfo]);
+
+  const loadDashboardStats = useCallback(async () => {
+    if (!currentRestaurantId) {
+      setDashboardStats(null);
+      return;
+    }
+    try {
+      setStatsLoading(true);
+      const data = await api.getRestaurantDashboardSummary(currentRestaurantId);
+      setDashboardStats(data as any);
+    } catch (error) {
+      console.error("Error loading dashboard stats:", error);
+      setDashboardStats(null);
+    } finally {
+      setStatsLoading(false);
+    }
+  }, [currentRestaurantId]);
+
+  useEffect(() => {
+    loadDashboardStats();
+  }, [loadDashboardStats]);
+
+  const formatPercent = (value?: number | null) => {
+    if (value === null || value === undefined) {
+      return "0%";
+    }
+    if (value > 0) return `+${value}%`;
+    if (value < 0) return `${value}%`;
+    return "0%";
+  };
+
+  const statsData = [
     {
       title: "Đơn hàng hôm nay",
-      value: "24",
-      change: "+12%",
+      value: dashboardStats
+        ? dashboardStats.ordersToday.toString()
+        : statsLoading
+        ? "..."
+        : "0",
+      change: formatPercent(dashboardStats?.ordersChange),
       icon: "receipt",
       color: theme.colors.primary,
     },
     {
       title: "Doanh thu hôm nay",
-      value: "2.4M",
-      change: "+8%",
+      value: dashboardStats
+        ? formatPrice(dashboardStats.revenueToday)
+        : statsLoading
+        ? "..."
+        : formatPrice(0),
+      change: formatPercent(dashboardStats?.revenueChange),
       icon: "attach-money",
       color: theme.colors.success,
     },
     {
       title: "Đánh giá trung bình",
-      value: "4.7",
-      change: "+0.2",
+      value: restaurantInfo
+        ? Number(restaurantInfo.rating || 0).toFixed(1)
+        : statsLoading
+        ? "..."
+        : "0.0",
+      change: "",
       icon: "star",
       color: theme.colors.warning,
     },
     {
-      title: "Khách hàng mới",
-      value: "15",
-      change: "+5",
-      icon: "person-add",
+      title: "Khách hàng đã đặt",
+      value: dashboardStats
+        ? dashboardStats.customersToday.toString()
+        : statsLoading
+        ? "..."
+        : "0",
+      change: formatPercent(dashboardStats?.customersChange),
+      icon: "people",
       color: theme.colors.info,
     },
   ];
 
-  const recentOrders = [
-    {
-      id: "1",
-      customer: "Nguyễn Văn A",
-      items: "Pizza Margherita x2",
-      total: 500000,
-      status: "preparing",
-      time: "14:30",
-    },
-    {
-      id: "2",
-      customer: "Trần Thị B",
-      items: "Chicken Burger x1",
-      total: 89000,
-      status: "ready",
-      time: "14:15",
-    },
-    {
-      id: "3",
-      customer: "Lê Văn C",
-      items: "Big Mac x1, Coca Cola x2",
-      total: 125000,
-      status: "delivering",
-      time: "14:00",
-    },
-  ];
-
-  const formatPrice = (price: number) => {
-    return new Intl.NumberFormat("vi-VN", {
-      style: "currency",
-      currency: "VND",
-    }).format(price);
-  };
-
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case "preparing":
-        return theme.colors.warning;
-      case "ready":
-        return theme.colors.info;
-      case "delivering":
-        return theme.colors.success;
-      default:
-        return theme.colors.mediumGray;
-    }
-  };
-
-  const getStatusText = (status: string) => {
-    switch (status) {
-      case "preparing":
-        return "Đang chuẩn bị";
-      case "ready":
-        return "Sẵn sàng";
-      case "delivering":
-        return "Đang giao";
-      default:
-        return status;
-    }
-  };
+  const recentOrders = orders
+    .slice()
+    .sort(
+      (a, b) =>
+        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    )
+    .slice(0, 5);
 
   const renderStatCard = (stat: any) => (
     <View key={stat.title} style={styles.statCard}>
@@ -117,26 +238,57 @@ const DashboardScreen = () => {
     </View>
   );
 
-  const renderOrderItem = (order: any) => (
-    <TouchableOpacity key={order.id} style={styles.orderCard}>
+  const renderOrderItem = (order: Order) => (
+    <TouchableOpacity
+      key={order.id}
+      style={styles.orderCard}
+      onPress={() => navigation.navigate("Orders" as never)}
+    >
       <View style={styles.orderHeader}>
         <View>
-          <Text style={styles.customerName}>{order.customer}</Text>
-          <Text style={styles.orderTime}>{order.time}</Text>
+          <Text style={styles.customerName}>
+            {order.user?.username || "Khách hàng"}
+          </Text>
+          <Text style={styles.orderTime}>
+            {formatDateTime(order.createdAt)}
+          </Text>
         </View>
         <View
           style={[
             styles.statusBadge,
-            { backgroundColor: getStatusColor(order.status) },
+            { backgroundColor: ORDER_STATUS_MAP[order.status]?.color },
           ]}
         >
-          <Text style={styles.statusText}>{getStatusText(order.status)}</Text>
+          <Text style={styles.statusText}>
+            {ORDER_STATUS_MAP[order.status]?.label || "Không xác định"}
+          </Text>
         </View>
       </View>
-      <Text style={styles.orderItems}>{order.items}</Text>
-      <Text style={styles.orderTotal}>{formatPrice(order.total)}</Text>
+      <Text style={styles.orderItems}>
+        {order.orderDetails
+          ?.map(
+            (detail) =>
+              `${detail.product?.name || "Món"} x${detail.quantity || 0}`
+          )
+          .join(", ")}
+      </Text>
+      <Text style={styles.orderTotal}>
+        {formatPrice(order.totalPrice + (order.shippingFee || 0))}
+      </Text>
     </TouchableOpacity>
   );
+
+  const handleNavigate = (tab: string) => {
+    navigation.navigate(tab as never);
+  };
+
+  if (loading && orders.length === 0) {
+    return (
+      <View style={[styles.container, styles.centerContent]}>
+        <ActivityIndicator size="large" color={theme.colors.primary} />
+      </View>
+    );
+  }
 
   return (
     <ScrollView style={styles.container}>
@@ -148,7 +300,7 @@ const DashboardScreen = () => {
         <View style={styles.headerContent}>
           <View>
             <Text style={styles.welcomeText}>Xin chào!</Text>
-            <Text style={styles.restaurantName}>Pizza Hut - Quận 1</Text>
+            <Text style={styles.restaurantName}>Cửa hàng của bạn</Text>
           </View>
           <TouchableOpacity style={styles.notificationButton}>
             <Icon name="notifications" size={24} color={theme.colors.surface} />
@@ -162,26 +314,38 @@ const DashboardScreen = () => {
       {/* Stats Grid */}
       <View style={styles.statsContainer}>
         <Text style={styles.sectionTitle}>Tổng quan hôm nay</Text>
-        <View style={styles.statsGrid}>{stats.map(renderStatCard)}</View>
+        <View style={styles.statsGrid}>{statsData.map(renderStatCard)}</View>
       </View>
 
       {/* Quick Actions */}
       <View style={styles.quickActionsContainer}>
         <Text style={styles.sectionTitle}>Thao tác nhanh</Text>
         <View style={styles.quickActionsGrid}>
-          <TouchableOpacity style={styles.quickActionButton}>
+          <TouchableOpacity
+            style={styles.quickActionButton}
+            onPress={() => handleNavigate("Menu")}
+          >
             <Icon name="add" size={24} color={theme.colors.primary} />
             <Text style={styles.quickActionText}>Thêm món</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.quickActionButton}>
+          <TouchableOpacity
+            style={styles.quickActionButton}
+            onPress={() => handleNavigate("Menu")}
+          >
             <Icon name="edit" size={24} color={theme.colors.primary} />
             <Text style={styles.quickActionText}>Sửa thực đơn</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.quickActionButton}>
+          <TouchableOpacity
+            style={styles.quickActionButton}
+            onPress={() => handleNavigate("Revenue")}
+          >
             <Icon name="trending-up" size={24} color={theme.colors.primary} />
             <Text style={styles.quickActionText}>Xem báo cáo</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.quickActionButton}>
+          <TouchableOpacity
+            style={styles.quickActionButton}
+            onPress={() => handleNavigate("Profile")}
+          >
             <Icon name="settings" size={24} color={theme.colors.primary} />
             <Text style={styles.quickActionText}>Cài đặt</Text>
           </TouchableOpacity>
@@ -192,11 +356,18 @@ const DashboardScreen = () => {
       <View style={styles.recentOrdersContainer}>
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>Đơn hàng gần đây</Text>
-          <TouchableOpacity>
+          <TouchableOpacity onPress={() => handleNavigate("Orders")}>
             <Text style={styles.seeAllText}>Xem tất cả</Text>
           </TouchableOpacity>
         </View>
-        {recentOrders.map(renderOrderItem)}
+        {recentOrders.length === 0 ? (
+          <View style={styles.emptyRecentOrders}>
+            <Icon name="receipt" size={48} color={theme.colors.mediumGray} />
+            <Text style={styles.emptyText}>Chưa có đơn hàng gần đây</Text>
+          </View>
+        ) : (
+          recentOrders.map(renderOrderItem)
+        )}
       </View>
     </ScrollView>
   );
@@ -342,6 +513,10 @@ const styles = StyleSheet.create({
     padding: theme.spacing.md,
     marginBottom: theme.spacing.sm,
     ...theme.shadows.small,
+  },
+  emptyRecentOrders: {
+    alignItems: "center",
+    paddingVertical: theme.spacing.xl,
   },
   orderHeader: {
     flexDirection: "row",
