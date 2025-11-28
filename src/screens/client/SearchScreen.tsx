@@ -9,6 +9,7 @@ import {
   ScrollView,
   ActivityIndicator,
   Alert,
+  Dimensions,
 } from "react-native";
 import Icon from "react-native-vector-icons/MaterialIcons";
 import { theme } from "../../theme/theme";
@@ -431,7 +432,13 @@ const SearchScreen = () => {
     }
   };
 
-  const renderProduct = ({ item }: { item: any }) => {
+  const renderProduct = ({
+    item,
+    isVertical = false,
+  }: {
+    item: any;
+    isVertical?: boolean;
+  }) => {
     const foodData = {
       id: item.id.toString(),
       name: item.name,
@@ -464,6 +471,7 @@ const SearchScreen = () => {
         food={foodData}
         onPress={handlePress}
         onAddToCart={() => handleAddToCart(item)}
+        vertical={isVertical} // Dùng layout dọc khi filter "Món ăn", ngang khi filter "Tất cả"
         available={item.available !== false}
       />
     );
@@ -591,7 +599,9 @@ const SearchScreen = () => {
               // Hiển thị ngang khi filter là "Tất cả"
               <FlatList
                 data={products}
-                renderItem={renderProduct}
+                renderItem={({ item }) =>
+                  renderProduct({ item, isVertical: false })
+                }
                 keyExtractor={(item) => `product-${item.id}`}
                 horizontal
                 showsHorizontalScrollIndicator={false}
@@ -619,7 +629,7 @@ const SearchScreen = () => {
                 }
               />
             ) : (
-              // Hiển thị dọc khi filter là "Món ăn"
+              // Hiển thị dọc 2 cột khi filter là "Món ăn"
               <>
                 {products.length === 0 && !productsLoading ? (
                   <View style={styles.emptyContainer}>
@@ -627,14 +637,16 @@ const SearchScreen = () => {
                   </View>
                 ) : (
                   <>
-                    {products.map((item) => (
-                      <View
-                        key={`product-${item.id}`}
-                        style={styles.productItem}
-                      >
-                        {renderProduct({ item })}
-                      </View>
-                    ))}
+                    <View style={styles.productsList}>
+                      {products.map((item) => (
+                        <View
+                          key={`product-${item.id}`}
+                          style={styles.productListItem}
+                        >
+                          {renderProduct({ item, isVertical: true })}
+                        </View>
+                      ))}
+                    </View>
                     {productsLoading && (
                       <View style={styles.loadingContainer}>
                         <ActivityIndicator
@@ -785,6 +797,13 @@ const styles = StyleSheet.create({
   productItem: {
     marginBottom: theme.spacing.md,
     paddingHorizontal: theme.spacing.lg,
+  },
+  productsList: {
+    paddingHorizontal: 0,
+  },
+  productListItem: {
+    marginHorizontal: theme.spacing.lg, // Giống với RestaurantCard
+    marginBottom: theme.spacing.md,
   },
   loadMoreButton: {
     padding: theme.spacing.md,

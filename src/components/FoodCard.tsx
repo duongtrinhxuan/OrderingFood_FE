@@ -84,16 +84,22 @@ const styles = StyleSheet.create({
   },
   containerVertical: {
     width: "100%",
-    flexDirection: "row",
-    marginRight: 0,
+    maxWidth: "100%",
+    marginRight: 0, // Override marginRight từ container
+    marginLeft: 0,
+    backgroundColor: theme.colors.surface,
+    borderRadius: theme.roundness,
+    overflow: "hidden", // Giữ hidden để shadow hoạt động tốt
+    ...theme.shadows.medium,
+    // Layout dọc cho grid 2 cột: ảnh trên, content dưới
   },
   imageContainer: {
     width: "100%",
     height: 120,
   },
   imageContainerVertical: {
-    width: 120,
-    height: 120,
+    width: "100%",
+    height: 120, // Giảm height để thu gọn
   },
   image: {
     width: "100%",
@@ -105,44 +111,46 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   contentVertical: {
+    padding: theme.spacing.sm, // Giảm padding từ md xuống sm
     flex: 1,
   },
   name: {
-    fontSize: 16,
+    fontSize: 13, // Giảm thêm một chút
     fontWeight: "bold",
     color: theme.colors.text,
-    marginBottom: theme.spacing.xs,
+    marginBottom: theme.spacing.xs / 2, // Giảm margin
   },
   restaurant: {
-    fontSize: 12,
+    fontSize: 11, // Giảm font size
     color: theme.colors.mediumGray,
-    marginBottom: theme.spacing.sm,
+    marginBottom: theme.spacing.xs, // Giảm margin
   },
   ratingContainer: {
     flexDirection: "row",
     alignItems: "center",
-    marginBottom: theme.spacing.sm,
+    marginBottom: theme.spacing.xs, // Giảm margin
   },
   ratingText: {
-    fontSize: 12,
+    fontSize: 11, // Giảm font size
     color: theme.colors.mediumGray,
-    marginLeft: theme.spacing.xs,
+    marginLeft: theme.spacing.xs / 2, // Giảm margin
   },
   footer: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
+    marginTop: theme.spacing.xs / 2, // Thêm margin top nhỏ
   },
   price: {
-    fontSize: 16,
+    fontSize: 13, // Giảm font size
     fontWeight: "bold",
     color: theme.colors.primary,
   },
   addButton: {
     backgroundColor: theme.colors.primary,
     borderRadius: theme.roundness / 2,
-    width: 32,
-    height: 32,
+    width: 28, // Giảm kích thước button
+    height: 28,
     justifyContent: "center",
     alignItems: "center",
   },
