@@ -1,4 +1,4 @@
-import React, {useState} from 'react';
+import React, { useState, useEffect, useCallback } from "react";
 import {
   View,
   Text,
@@ -6,208 +6,315 @@ import {
   FlatList,
   TouchableOpacity,
   Image,
-} from 'react-native';
-import Icon from 'react-native-vector-icons/MaterialIcons';
-import {theme} from '../../theme/theme';
+  RefreshControl,
+  ActivityIndicator,
+} from "react-native";
+import Icon from "react-native-vector-icons/MaterialIcons";
+import { theme } from "../../theme/theme";
+import { useAuth } from "../../context/AuthContext";
+import { api } from "../../services/api";
+import { formatPrice, formatDateTime } from "../../utils/helpers";
+import { useNavigation } from "@react-navigation/native";
+import FeedbackModal, { OrderFeedback } from "../../components/FeedbackModal";
 
-// Mock order data
-const mockOrders = [
-  {
-    id: '1',
-    restaurant: 'Pizza Hut',
-    status: 'delivering',
-    items: [
-      {name: 'Pizza Margherita', quantity: 2},
-      {name: 'Coca Cola', quantity: 1},
-    ],
-    total: 515000,
-    orderTime: '2024-01-15 14:30',
-    deliveryTime: '25-35 phút',
-    image: 'https://via.placeholder.com/100x100',
-  },
-  {
-    id: '2',
-    restaurant: 'KFC',
-    status: 'completed',
-    items: [
-      {name: 'Chicken Burger', quantity: 1},
-      {name: 'French Fries', quantity: 1},
-    ],
-    total: 101000,
-    orderTime: '2024-01-14 19:45',
-    deliveryTime: 'Đã giao',
-    image: 'https://via.placeholder.com/100x100',
-  },
-  {
-    id: '3',
-    restaurant: 'McDonald\'s',
-    status: 'cancelled',
-    items: [
-      {name: 'Big Mac', quantity: 1},
-    ],
-    total: 75000,
-    orderTime: '2024-01-13 12:15',
-    deliveryTime: 'Đã hủy',
-    image: 'https://via.placeholder.com/100x100',
-  },
+interface OrderDetail {
+  id: number;
+  quantity: number;
+  product?: {
+    id: number;
+    name: string;
+    imageUrl?: string;
+  };
+}
+
+interface Order {
+  id: number;
+  status: number;
+  totalPrice: number;
+  shippingFee: number;
+  createdAt: string;
+  restaurant?: {
+    id: number;
+    name: string;
+    imageUrl?: string;
+  };
+  orderDetails?: OrderDetail[];
+  feedbacks?: OrderFeedback[];
+}
+
+const STATUS_FILTERS = [
+  { key: "all", label: "Tất cả", status: undefined },
+  { key: "processing", label: "Đang xử lý", status: 1 },
+  { key: "confirmed", label: "Đã xác nhận", status: 2 },
+  { key: "delivering", label: "Đang giao", status: 3 },
+  { key: "completed", label: "Hoàn thành", status: 4 },
+  { key: "cancelled", label: "Đã hủy", status: 5 },
 ];
 
+const ORDER_STATUS_MAP: Record<number, { label: string; color: string }> = {
+  1: { label: "Đang xử lý", color: theme.colors.warning },
+  2: { label: "Đã xác nhận", color: theme.colors.info },
+  3: { label: "Đang giao", color: theme.colors.primary },
+  4: { label: "Hoàn thành", color: theme.colors.success },
+  5: { label: "Đã hủy", color: theme.colors.error },
+};
+
 const OrdersScreen = () => {
-  const [selectedStatus, setSelectedStatus] = useState('all');
-  const [orders] = useState(mockOrders);
+  const navigation = useNavigation();
+  const [selectedStatus, setSelectedStatus] = useState("all");
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [feedbackModalVisible, setFeedbackModalVisible] = useState(false);
+  const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
 
-  const statusFilters = [
-    {key: 'all', label: 'Tất cả'},
-    {key: 'delivering', label: 'Đang giao'},
-    {key: 'completed', label: 'Hoàn thành'},
-    {key: 'cancelled', label: 'Đã hủy'},
-  ];
+  const { user } = useAuth();
 
-  const formatPrice = (price: number) => {
-    return new Intl.NumberFormat('vi-VN', {
-      style: 'currency',
-      currency: 'VND',
-    }).format(price);
-  };
-
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'delivering':
-        return theme.colors.warning;
-      case 'completed':
-        return theme.colors.success;
-      case 'cancelled':
-        return theme.colors.error;
-      default:
-        return theme.colors.mediumGray;
-    }
-  };
-
-  const getStatusText = (status: string) => {
-    switch (status) {
-      case 'delivering':
-        return 'Đang giao';
-      case 'completed':
-        return 'Hoàn thành';
-      case 'cancelled':
-        return 'Đã hủy';
-      default:
-        return status;
-    }
-  };
-
-  const filteredOrders = orders.filter(order => 
-    selectedStatus === 'all' || order.status === selectedStatus
+  const currentStatusFilter = STATUS_FILTERS.find(
+    (filter) => filter.key === selectedStatus
   );
 
-  const renderStatusFilter = (filter: any) => (
+  const loadOrders = useCallback(async () => {
+    if (!user?.id) {
+      setOrders([]);
+      return;
+    }
+
+    try {
+      setLoading(true);
+      const data = await api.getOrdersByUser(
+        user.id,
+        currentStatusFilter?.status
+      );
+      setOrders((data as Order[]) || []);
+    } catch (error) {
+      console.error("Error loading orders:", error);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, [user?.id, currentStatusFilter?.status]);
+
+  useEffect(() => {
+    loadOrders();
+  }, [loadOrders]);
+
+  const onRefresh = () => {
+    setRefreshing(true);
+    loadOrders();
+  };
+
+  const openFeedbackModal = (order: Order) => {
+    setSelectedOrder(order);
+    setFeedbackModalVisible(true);
+  };
+
+  const closeFeedbackModal = () => {
+    setSelectedOrder(null);
+    setFeedbackModalVisible(false);
+  };
+
+  const handleFeedbackSaved = () => {
+    closeFeedbackModal();
+    loadOrders();
+  };
+
+  const buildOrderItemsSummary = (orderDetails?: OrderDetail[]) => {
+    if (!orderDetails || orderDetails.length === 0) return "";
+    return orderDetails
+      .map((detail) => {
+        const name = detail.product?.name || "Món ăn";
+        return `${name} x${detail.quantity || 0}`;
+      })
+      .join(", ");
+  };
+
+  const renderStatusFilter = (filter: (typeof STATUS_FILTERS)[number]) => (
     <TouchableOpacity
       key={filter.key}
       style={[
         styles.filterChip,
         selectedStatus === filter.key && styles.selectedFilterChip,
       ]}
-      onPress={() => setSelectedStatus(filter.key)}>
+      onPress={() => setSelectedStatus(filter.key)}
+    >
       <Text
         style={[
           styles.filterText,
           selectedStatus === filter.key && styles.selectedFilterText,
-        ]}>
+        ]}
+      >
         {filter.label}
       </Text>
     </TouchableOpacity>
   );
 
-  const renderOrder = ({item}: {item: any}) => (
-    <TouchableOpacity style={styles.orderCard}>
-      <View style={styles.orderHeader}>
-        <View style={styles.restaurantInfo}>
-          <View style={styles.restaurantImageContainer}>
-            <Icon name="restaurant" size={24} color={theme.colors.primary} />
+  const renderOrder = ({ item }: { item: Order }) => {
+    const statusInfo = ORDER_STATUS_MAP[item.status] || {
+      label: "Không xác định",
+      color: theme.colors.mediumGray,
+    };
+    const orderTotal =
+      (item.totalPrice || 0) + (item.shippingFee ? item.shippingFee : 0);
+    const orderDetails = item.orderDetails || [];
+    const existingFeedback = item.feedbacks?.[0];
+
+    return (
+      <TouchableOpacity
+        style={styles.orderCard}
+        activeOpacity={0.9}
+        onPress={() =>
+          navigation.navigate(
+            "OrderDetail" as never,
+            {
+              orderId: item.id,
+            } as never
+          )
+        }
+      >
+        <View style={styles.orderHeader}>
+          <View style={styles.restaurantInfo}>
+            <Image
+              source={{
+                uri:
+                  item.restaurant?.imageUrl ||
+                  "https://via.placeholder.com/80x80",
+              }}
+              style={styles.restaurantImage}
+            />
+            <View>
+              <Text style={styles.restaurantName}>
+                {item.restaurant?.name || "Nhà hàng"}
+              </Text>
+              <Text style={styles.orderTime}>
+                {formatDateTime(item.createdAt)}
+              </Text>
+            </View>
           </View>
-          <View>
-            <Text style={styles.restaurantName}>{item.restaurant}</Text>
-            <Text style={styles.orderTime}>{item.orderTime}</Text>
-          </View>
-        </View>
-        <View style={styles.statusContainer}>
           <View
-            style={[
-              styles.statusBadge,
-              {backgroundColor: getStatusColor(item.status)},
-            ]}>
-            <Text style={styles.statusText}>
-              {getStatusText(item.status)}
-            </Text>
+            style={[styles.statusBadge, { backgroundColor: statusInfo.color }]}
+          >
+            <Text style={styles.statusText}>{statusInfo.label}</Text>
           </View>
         </View>
-      </View>
 
-      <View style={styles.orderItems}>
-        {item.items.map((orderItem: any, index: number) => (
-          <Text key={index} style={styles.orderItemText}>
-            {orderItem.quantity}x {orderItem.name}
-          </Text>
-        ))}
-      </View>
-
-      <View style={styles.orderFooter}>
-        <View style={styles.deliveryInfo}>
-          <Icon name="schedule" size={16} color={theme.colors.mediumGray} />
-          <Text style={styles.deliveryText}>{item.deliveryTime}</Text>
+        <View style={styles.orderItems}>
+          {orderDetails.length > 0 ? (
+            orderDetails.map((detail) => (
+              <View key={detail.id} style={styles.orderDetailRow}>
+                <Text style={styles.orderItemText}>
+                  {detail.product?.name || "Món ăn"}
+                </Text>
+                <Text style={styles.orderItemQuantity}>
+                  x{detail.quantity || 0}
+                </Text>
+              </View>
+            ))
+          ) : (
+            <Text style={styles.orderItemText}>Không có món ăn</Text>
+          )}
         </View>
-        <Text style={styles.orderTotal}>{formatPrice(item.total)}</Text>
-      </View>
 
-      <View style={styles.orderActions}>
-        <TouchableOpacity style={styles.actionButton}>
-          <Text style={styles.actionButtonText}>Xem chi tiết</Text>
-        </TouchableOpacity>
-        {item.status === 'delivering' && (
-          <TouchableOpacity style={styles.trackButton}>
-            <Icon name="my-location" size={16} color={theme.colors.primary} />
-            <Text style={styles.trackButtonText}>Theo dõi</Text>
+        <View style={styles.orderFooter}>
+          <View style={styles.deliveryInfo}>
+            <Icon name="schedule" size={16} color={theme.colors.mediumGray} />
+            <Text style={styles.deliveryText}>25-35 phút</Text>
+          </View>
+          <Text style={styles.orderTotal}>{formatPrice(orderTotal)}</Text>
+        </View>
+
+        {item.status === 4 ? (
+          <TouchableOpacity
+            style={[
+              styles.reviewButton,
+              existingFeedback
+                ? styles.reviewButtonOutlined
+                : styles.reviewButtonFilled,
+            ]}
+            onPress={() => openFeedbackModal(item)}
+          >
+            <Icon
+              name="rate-review"
+              size={16}
+              color={
+                existingFeedback ? theme.colors.primary : theme.colors.surface
+              }
+            />
+            <Text
+              style={[
+                styles.reviewButtonText,
+                existingFeedback
+                  ? { color: theme.colors.primary }
+                  : { color: theme.colors.surface },
+              ]}
+            >
+              {existingFeedback ? "Cập nhật nhận xét" : "Nhận xét về đơn hàng"}
+            </Text>
           </TouchableOpacity>
-        )}
-        {item.status === 'completed' && (
-          <TouchableOpacity style={styles.reorderButton}>
-            <Text style={styles.reorderButtonText}>Đặt lại</Text>
-          </TouchableOpacity>
-        )}
-      </View>
-    </TouchableOpacity>
-  );
+        ) : null}
+      </TouchableOpacity>
+    );
+  };
+
+  const isEmpty = !loading && orders.length === 0;
 
   return (
     <View style={styles.container}>
-      {/* Status Filters */}
+      <Text style={styles.pageTitle}>Đơn hàng</Text>
+
       <View style={styles.filtersContainer}>
         <FlatList
-          data={statusFilters}
-          renderItem={({item}) => renderStatusFilter(item)}
-          keyExtractor={item => item.key}
+          data={STATUS_FILTERS}
+          renderItem={({ item }) => renderStatusFilter(item)}
+          keyExtractor={(item) => item.key}
           horizontal
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.filtersScroll}
         />
       </View>
 
-      {/* Orders List */}
-      <FlatList
-        data={filteredOrders}
-        renderItem={renderOrder}
-        keyExtractor={item => item.id}
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.ordersList}
-        ListEmptyComponent={
-          <View style={styles.emptyContainer}>
-            <Icon name="receipt" size={64} color={theme.colors.mediumGray} />
-            <Text style={styles.emptyText}>Không có đơn hàng</Text>
-            <Text style={styles.emptySubtext}>
-              Bạn chưa có đơn hàng nào
-            </Text>
-          </View>
-        }
+      {loading && orders.length === 0 ? (
+        <View style={[styles.container, styles.centerContent]}>
+          <ActivityIndicator size="large" color={theme.colors.primary} />
+        </View>
+      ) : (
+        <FlatList
+          data={orders}
+          renderItem={renderOrder}
+          keyExtractor={(item) => item.id.toString()}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={[
+            styles.ordersList,
+            { paddingBottom: theme.navbarHeight + theme.spacing.md },
+          ]}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+          }
+          ListEmptyComponent={
+            isEmpty ? (
+              <View style={styles.emptyContainer}>
+                <Icon
+                  name="receipt"
+                  size={64}
+                  color={theme.colors.mediumGray}
+                />
+                <Text style={styles.emptyText}>Không có đơn hàng</Text>
+                <Text style={styles.emptySubtext}>
+                  Bạn chưa có đơn hàng nào
+                </Text>
+              </View>
+            ) : null
+          }
+        />
+      )}
+      <FeedbackModal
+        visible={feedbackModalVisible}
+        onClose={closeFeedbackModal}
+        onSuccess={handleFeedbackSaved}
+        orderId={selectedOrder?.id || 0}
+        orderName={selectedOrder?.restaurant?.name}
+        orderItemsSummary={buildOrderItemsSummary(selectedOrder?.orderDetails)}
+        existingFeedback={selectedOrder?.feedbacks?.[0]}
       />
     </View>
   );
@@ -217,6 +324,14 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: theme.colors.background,
+  },
+  pageTitle: {
+    fontSize: 24,
+    fontWeight: "bold",
+    color: theme.colors.text,
+    paddingHorizontal: theme.spacing.lg,
+    paddingTop: theme.spacing.lg,
+    paddingBottom: theme.spacing.sm,
   },
   filtersContainer: {
     backgroundColor: theme.colors.surface,
@@ -242,7 +357,7 @@ const styles = StyleSheet.create({
   },
   filterText: {
     fontSize: 14,
-    fontWeight: '500',
+    fontWeight: "500",
     color: theme.colors.mediumGray,
   },
   selectedFilterText: {
@@ -259,28 +374,35 @@ const styles = StyleSheet.create({
     ...theme.shadows.small,
   },
   orderHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
     marginBottom: theme.spacing.sm,
   },
   restaurantInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     flex: 1,
+  },
+  restaurantImage: {
+    width: 48,
+    height: 48,
+    borderRadius: theme.roundness,
+    marginRight: theme.spacing.sm,
+    backgroundColor: theme.colors.lightOrange,
   },
   restaurantImageContainer: {
     width: 40,
     height: 40,
     backgroundColor: theme.colors.lightOrange,
     borderRadius: theme.roundness / 2,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
     marginRight: theme.spacing.sm,
   },
   restaurantName: {
     fontSize: 16,
-    fontWeight: 'bold',
+    fontWeight: "bold",
     color: theme.colors.text,
   },
   orderTime: {
@@ -288,36 +410,69 @@ const styles = StyleSheet.create({
     color: theme.colors.mediumGray,
     marginTop: theme.spacing.xs,
   },
-  statusContainer: {
-    alignItems: 'flex-end',
-  },
   statusBadge: {
     paddingHorizontal: theme.spacing.sm,
     paddingVertical: theme.spacing.xs,
     borderRadius: theme.roundness / 2,
+    alignSelf: "flex-start",
   },
   statusText: {
     fontSize: 12,
-    fontWeight: 'bold',
+    fontWeight: "bold",
     color: theme.colors.surface,
   },
   orderItems: {
-    marginBottom: theme.spacing.sm,
+    marginVertical: theme.spacing.sm,
+    backgroundColor: theme.colors.background,
+    borderRadius: theme.roundness,
+    padding: theme.spacing.sm,
+  },
+  orderDetailRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginBottom: theme.spacing.xs,
   },
   orderItemText: {
     fontSize: 14,
-    color: theme.colors.mediumGray,
-    marginBottom: theme.spacing.xs,
+    color: theme.colors.text,
+    flex: 1,
+    marginRight: theme.spacing.sm,
+  },
+  orderItemQuantity: {
+    fontSize: 14,
+    fontWeight: "bold",
+    color: theme.colors.primary,
   },
   orderFooter: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
     marginBottom: theme.spacing.sm,
   },
+  reviewButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: theme.roundness,
+    paddingVertical: theme.spacing.sm,
+    marginTop: theme.spacing.sm,
+  },
+  reviewButtonFilled: {
+    backgroundColor: theme.colors.primary,
+  },
+  reviewButtonOutlined: {
+    borderWidth: 1,
+    borderColor: theme.colors.primary,
+    backgroundColor: theme.colors.surface,
+  },
+  reviewButtonText: {
+    fontSize: 14,
+    fontWeight: "600",
+    marginLeft: theme.spacing.xs,
+  },
   deliveryInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
   },
   deliveryText: {
     fontSize: 12,
@@ -326,59 +481,18 @@ const styles = StyleSheet.create({
   },
   orderTotal: {
     fontSize: 16,
-    fontWeight: 'bold',
+    fontWeight: "bold",
     color: theme.colors.primary,
-  },
-  orderActions: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  actionButton: {
-    paddingVertical: theme.spacing.sm,
-    paddingHorizontal: theme.spacing.md,
-    borderRadius: theme.roundness / 2,
-    borderWidth: 1,
-    borderColor: theme.colors.primary,
-  },
-  actionButtonText: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: theme.colors.primary,
-  },
-  trackButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: theme.spacing.sm,
-    paddingHorizontal: theme.spacing.md,
-    borderRadius: theme.roundness / 2,
-    backgroundColor: theme.colors.lightOrange,
-  },
-  trackButtonText: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: theme.colors.primary,
-    marginLeft: theme.spacing.xs,
-  },
-  reorderButton: {
-    paddingVertical: theme.spacing.sm,
-    paddingHorizontal: theme.spacing.md,
-    borderRadius: theme.roundness / 2,
-    backgroundColor: theme.colors.primary,
-  },
-  reorderButtonText: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: theme.colors.surface,
   },
   emptyContainer: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
     paddingVertical: theme.spacing.xxl,
   },
   emptyText: {
     fontSize: 18,
-    fontWeight: 'bold',
+    fontWeight: "bold",
     color: theme.colors.mediumGray,
     marginTop: theme.spacing.md,
   },
@@ -386,7 +500,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: theme.colors.mediumGray,
     marginTop: theme.spacing.sm,
-    textAlign: 'center',
+    textAlign: "center",
   },
 });
 
