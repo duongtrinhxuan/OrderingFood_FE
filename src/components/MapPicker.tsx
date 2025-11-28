@@ -7,6 +7,8 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Alert,
+  Linking,
+  Platform,
 } from "react-native";
 import MapView, { Marker, PROVIDER_GOOGLE } from "react-native-maps";
 import Icon from "react-native-vector-icons/MaterialIcons";
@@ -129,6 +131,43 @@ const MapPicker: React.FC<MapPickerProps> = ({
     }
   };
 
+  const handleOpenInGoogleMaps = async () => {
+    if (!selectedLocation) {
+      Alert.alert("Lỗi", "Vui lòng chọn một vị trí trên bản đồ trước.");
+      return;
+    }
+
+    const { latitude, longitude } = selectedLocation;
+
+    // Deep link ưu tiên app Google Maps (đặc biệt trên iOS), fallback sang URL web
+    const googleMapsAppUrl = Platform.select({
+      ios: `comgooglemaps://?q=${latitude},${longitude}&center=${latitude},${longitude}&zoom=16`,
+      android: `geo:${latitude},${longitude}?q=${latitude},${longitude}`,
+      default: `https://www.google.com/maps/search/?api=1&query=${latitude},${longitude}`,
+    });
+
+    const googleMapsWebUrl = `https://www.google.com/maps/search/?api=1&query=${latitude},${longitude}`;
+
+    try {
+      if (
+        googleMapsAppUrl &&
+        (Platform.OS === "ios" || Platform.OS === "android")
+      ) {
+        const canOpenApp = await Linking.canOpenURL(googleMapsAppUrl);
+        if (canOpenApp) {
+          await Linking.openURL(googleMapsAppUrl);
+          return;
+        }
+      }
+      await Linking.openURL(googleMapsWebUrl);
+    } catch (error) {
+      Alert.alert(
+        "Lỗi",
+        "Không thể mở Google Maps trên thiết bị. Vui lòng kiểm tra lại."
+      );
+    }
+  };
+
   return (
     <Modal
       visible={visible}
@@ -181,6 +220,22 @@ const MapPicker: React.FC<MapPickerProps> = ({
               Chạm vào bản đồ để chọn vị trí hoặc kéo marker để di chuyển
             </Text>
           </View>
+          <TouchableOpacity
+            style={[
+              styles.openMapsButton,
+              !selectedLocation && styles.openMapsButtonDisabled,
+            ]}
+            onPress={handleOpenInGoogleMaps}
+            disabled={!selectedLocation}
+          >
+            <Icon
+              name="map"
+              size={18}
+              color={theme.colors.surface}
+              style={{ marginRight: theme.spacing.xs }}
+            />
+            <Text style={styles.openMapsButtonText}>Mở bằng Google Maps</Text>
+          </TouchableOpacity>
           <TouchableOpacity
             style={[
               styles.confirmButton,
@@ -254,6 +309,25 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 12,
     color: theme.colors.mediumGray,
+  },
+  openMapsButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: theme.roundness,
+    borderWidth: 1,
+    borderColor: theme.colors.primary,
+    paddingVertical: theme.spacing.sm,
+    marginBottom: theme.spacing.sm,
+    backgroundColor: theme.colors.primary,
+  },
+  openMapsButtonDisabled: {
+    opacity: 0.5,
+  },
+  openMapsButtonText: {
+    color: theme.colors.surface,
+    fontSize: 14,
+    fontWeight: "600",
   },
   confirmButton: {
     backgroundColor: theme.colors.primary,
