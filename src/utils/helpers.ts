@@ -84,6 +84,22 @@ export const formatDistance = (distance: number): string => {
   return `${distance}km`;
 };
 
+// Calculate delivery time from distance (1 hour = 50km)
+export const calculateDeliveryTime = (distance: number): string => {
+  if (!distance || distance <= 0) {
+    return "Không xác định";
+  }
+  // 1 giờ đi được 50km, nên lấy khoảng cách chia 50 để ra số giờ
+  const hours = distance / 50;
+  const minutes = Math.round(hours * 60);
+
+  // Format: "X phút" hoặc "X-Y phút" (thêm buffer 10 phút)
+  if (minutes < 30) {
+    return `${Math.max(15, minutes)}-${minutes + 10} phút`;
+  }
+  return `${minutes}-${minutes + 15} phút`;
+};
+
 // Validate email
 export const isValidEmail = (email: string): boolean => {
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;

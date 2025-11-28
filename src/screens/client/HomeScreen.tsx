@@ -22,7 +22,11 @@ import { useNavigation } from "@react-navigation/native";
 import { useAuth } from "../../context/AuthContext";
 import { useCart } from "../../context/CartContext";
 import { api } from "../../services/api";
-import { calculateDistance, formatDistance } from "../../utils/helpers";
+import {
+  calculateDistance,
+  formatDistance,
+  calculateDeliveryTime,
+} from "../../utils/helpers";
 
 interface Product {
   id: number;
@@ -267,20 +271,32 @@ const HomeScreen = () => {
       typeof item.rating === "number" && !Number.isNaN(item.rating)
         ? item.rating
         : 0;
+
+    // Tính khoảng cách nếu có tọa độ customer và nhà hàng
+    let distance = item.distance;
+    if (!distance && userDefaultAddress && item.address) {
+      distance = calculateDistance(
+        userDefaultAddress.latitude,
+        userDefaultAddress.longitude,
+        item.address.latitude,
+        item.address.longitude
+      );
+    }
+
     const restaurantData = {
       id: item.id.toString(),
       name: item.name,
       rating: ratingValue,
-      deliveryTime: "25-35 phút",
-      deliveryFee: 15000,
+      deliveryTime: distance
+        ? calculateDeliveryTime(distance)
+        : "Không xác định",
+      deliveryFee: 20000, // Phí ship mặc định 20.000đ
       image: item.imageUrl || "https://via.placeholder.com/300x200",
       categories:
         item.categories?.map(
           (c: any) => c.name || c.category?.name || "Nhà hàng"
         ) || [],
-      distance: item.distance
-        ? formatDistance(item.distance)
-        : "Không xác định",
+      distance: distance ? formatDistance(distance) : "Không xác định",
     };
 
     return (
