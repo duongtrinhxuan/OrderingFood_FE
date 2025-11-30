@@ -46,6 +46,8 @@ const ComplaintsListScreen = () => {
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [editingComplaint, setEditingComplaint] =
+    useState<ComplaintReport | null>(null);
 
   const fetchComplaints = useCallback(async () => {
     if (!user?.id) {
@@ -81,12 +83,26 @@ const ComplaintsListScreen = () => {
 
   const handleCreateSuccess = () => {
     setShowCreateModal(false);
+    setEditingComplaint(null);
     fetchComplaints();
   };
 
+  const handleComplaintPress = (item: ComplaintReport) => {
+    // Chỉ cho phép chỉnh sửa nếu isDraft = true
+    if (item.isDraft) {
+      setEditingComplaint(item);
+    }
+  };
+
   const renderComplaintItem = ({ item }: { item: ComplaintReport }) => {
+    const isDraft = item.isDraft;
     return (
-      <View style={styles.complaintCard}>
+      <TouchableOpacity
+        style={[styles.complaintCard, isDraft && styles.complaintCardDraft]}
+        onPress={() => handleComplaintPress(item)}
+        activeOpacity={isDraft ? 0.7 : 1}
+        disabled={!isDraft}
+      >
         <View style={styles.complaintHeader}>
           <View style={styles.complaintIdContainer}>
             <Text style={styles.complaintIdLabel}>Mã:</Text>
@@ -106,10 +122,18 @@ const ComplaintsListScreen = () => {
         <Text style={styles.complaintContent} numberOfLines={3}>
           {item.content}
         </Text>
-        <Text style={styles.complaintDate}>
-          {new Date(item.createdAt).toLocaleString("vi-VN")}
-        </Text>
-      </View>
+        <View style={styles.complaintFooter}>
+          <Text style={styles.complaintDate}>
+            {new Date(item.createdAt).toLocaleString("vi-VN")}
+          </Text>
+          {isDraft && (
+            <View style={styles.editHint}>
+              <Icon name="edit" size={14} color={theme.colors.primary} />
+              <Text style={styles.editHintText}>Chạm để chỉnh sửa</Text>
+            </View>
+          )}
+        </View>
+      </TouchableOpacity>
     );
   };
 
@@ -165,10 +189,14 @@ const ComplaintsListScreen = () => {
       {/* Create Complaint Modal */}
       {user && (
         <CreateComplaintModal
-          visible={showCreateModal}
-          onClose={() => setShowCreateModal(false)}
+          visible={showCreateModal || editingComplaint !== null}
+          onClose={() => {
+            setShowCreateModal(false);
+            setEditingComplaint(null);
+          }}
           onSuccess={handleCreateSuccess}
           userId={user.id}
+          complaint={editingComplaint}
         />
       )}
     </View>
@@ -215,6 +243,11 @@ const styles = StyleSheet.create({
     padding: theme.spacing.md,
     marginBottom: theme.spacing.md,
     ...theme.shadows.small,
+  },
+  complaintCardDraft: {
+    borderWidth: 1,
+    borderColor: theme.colors.primary,
+    borderStyle: "dashed",
   },
   complaintHeader: {
     flexDirection: "row",
@@ -264,9 +297,25 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     marginBottom: theme.spacing.sm,
   },
+  complaintFooter: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginTop: theme.spacing.xs,
+  },
   complaintDate: {
     fontSize: 12,
     color: theme.colors.mediumGray,
+  },
+  editHint: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing.xs,
+  },
+  editHintText: {
+    fontSize: 12,
+    color: theme.colors.primary,
+    fontStyle: "italic",
   },
   emptyContainer: {
     flex: 1,

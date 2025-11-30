@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Modal,
   View,
@@ -16,11 +16,18 @@ import Icon from "react-native-vector-icons/MaterialIcons";
 import { theme } from "../theme/theme";
 import { api } from "../services/api";
 
+interface ComplaintReport {
+  id: number;
+  content: string;
+  isDraft: boolean;
+}
+
 type Props = {
   visible: boolean;
   onClose: () => void;
   onSuccess: () => void;
   userId: number;
+  complaint?: ComplaintReport | null; // Nếu có thì là edit mode
 };
 
 const CreateComplaintModal: React.FC<Props> = ({
@@ -28,10 +35,20 @@ const CreateComplaintModal: React.FC<Props> = ({
   onClose,
   onSuccess,
   userId,
+  complaint,
 }) => {
   const [content, setContent] = useState("");
   const [saving, setSaving] = useState(false);
   const [sending, setSending] = useState(false);
+
+  // Khi modal mở hoặc complaint thay đổi, cập nhật content
+  useEffect(() => {
+    if (visible && complaint) {
+      setContent(complaint.content || "");
+    } else if (visible && !complaint) {
+      setContent("");
+    }
+  }, [visible, complaint]);
 
   const handleSaveDraft = async () => {
     if (!content.trim()) {
@@ -41,13 +58,23 @@ const CreateComplaintModal: React.FC<Props> = ({
 
     try {
       setSaving(true);
-      await api.createComplaintReport({
-        userId,
-        content: content.trim(),
-        isDraft: true,
-        isRead: false,
-      });
-      Alert.alert("Thành công", "Đã lưu bản nháp.");
+      if (complaint) {
+        // Edit mode: chỉ cập nhật content, giữ nguyên isDraft = true
+        await api.updateComplaintReport(complaint.id, {
+          content: content.trim(),
+          isDraft: true,
+        });
+        Alert.alert("Thành công", "Đã cập nhật bản nháp.");
+      } else {
+        // Create mode: tạo mới
+        await api.createComplaintReport({
+          userId,
+          content: content.trim(),
+          isDraft: true,
+          isRead: false,
+        });
+        Alert.alert("Thành công", "Đã lưu bản nháp.");
+      }
       setContent("");
       onSuccess();
     } catch (error: any) {
@@ -66,13 +93,23 @@ const CreateComplaintModal: React.FC<Props> = ({
 
     try {
       setSending(true);
-      await api.createComplaintReport({
-        userId,
-        content: content.trim(),
-        isDraft: false,
-        isRead: false,
-      });
-      Alert.alert("Thành công", "Đã gửi khiếu nại thành công.");
+      if (complaint) {
+        // Edit mode: cập nhật content và set isDraft = false
+        await api.updateComplaintReport(complaint.id, {
+          content: content.trim(),
+          isDraft: false,
+        });
+        Alert.alert("Thành công", "Đã gửi khiếu nại thành công.");
+      } else {
+        // Create mode: tạo mới
+        await api.createComplaintReport({
+          userId,
+          content: content.trim(),
+          isDraft: false,
+          isRead: false,
+        });
+        Alert.alert("Thành công", "Đã gửi khiếu nại thành công.");
+      }
       setContent("");
       onSuccess();
     } catch (error: any) {
@@ -121,7 +158,9 @@ const CreateComplaintModal: React.FC<Props> = ({
           <View style={styles.sheet}>
             {/* Header */}
             <View style={styles.header}>
-              <Text style={styles.headerTitle}>Tạo khiếu nại mới</Text>
+              <Text style={styles.headerTitle}>
+                {complaint ? "Chỉnh sửa khiếu nại" : "Tạo khiếu nại mới"}
+              </Text>
               <TouchableOpacity
                 style={styles.closeButton}
                 onPress={handleClose}
