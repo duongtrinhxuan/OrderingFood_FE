@@ -39,7 +39,9 @@ interface CartItem {
 
 interface Discount {
   id: number;
-  percent: number;
+  type?: number;
+  percent?: number;
+  discountmoney?: number;
   description: string;
   startTime: string;
   endTime: string;
@@ -206,10 +208,19 @@ const CheckoutScreen = ({ navigation }: any) => {
     if (startTime && now < startTime) return 0;
     if (endTime && now > endTime) return 0;
 
-    // Tính discount
-    const discountAmount = Math.floor(
-      (subtotal * selectedDiscount.percent) / 100
-    );
+    // Tính discount dựa trên type
+    const discountType = selectedDiscount.type || 1;
+    let discountAmount = 0;
+
+    if (discountType === 1) {
+      // Giảm theo phần trăm
+      const percent = selectedDiscount.percent || 0;
+      discountAmount = Math.floor((subtotal * percent) / 100);
+    } else if (discountType === 2) {
+      // Giảm theo số tiền cố định
+      discountAmount = selectedDiscount.discountmoney || 0;
+    }
+
     return discountAmount;
   };
 

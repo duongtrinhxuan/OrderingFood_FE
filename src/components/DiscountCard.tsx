@@ -8,8 +8,10 @@ interface DiscountCardProps {
   discount: {
     id: number;
     code: string;
+    type?: number;
+    percent?: number;
+    discountmoney?: number;
     description: string;
-    percent: number;
     startTime: string;
     endTime: string;
     status: string;
@@ -27,6 +29,12 @@ const DiscountCard: React.FC<DiscountCardProps> = ({ discount, onPress }) => {
     });
   };
 
+  const discountType = discount.type || 1;
+  const discountDisplay =
+    discountType === 1
+      ? `${discount.percent || 0}%`
+      : `${discount.discountmoney?.toLocaleString("vi-VN") || 0} VND`;
+
   return (
     <TouchableOpacity style={styles.container} onPress={onPress}>
       <LinearGradient
@@ -36,14 +44,19 @@ const DiscountCard: React.FC<DiscountCardProps> = ({ discount, onPress }) => {
         <View style={styles.content}>
           <View style={styles.header}>
             <View style={styles.percentContainer}>
-              <Text style={styles.percentText}>{discount.percent}%</Text>
+              <Text style={styles.percentText}>{discountDisplay}</Text>
               <Text style={styles.percentLabel}>GIẢM</Text>
             </View>
             <Icon name="local-offer" size={32} color={theme.colors.surface} />
           </View>
 
           <Text style={styles.description} numberOfLines={2}>
-            {discount.description || `Giảm ${discount.percent}% cho đơn hàng`}
+            {discount.description ||
+              (discountType === 1
+                ? `Giảm ${discount.percent}% cho đơn hàng`
+                : `Giảm ${discount.discountmoney?.toLocaleString(
+                    "vi-VN"
+                  )} VND cho đơn hàng`)}
           </Text>
 
           <View style={styles.timeContainer}>

@@ -15,7 +15,9 @@ import { formatDate } from "../utils/helpers";
 
 interface Discount {
   id: number;
-  percent: number;
+  type?: number;
+  percent?: number;
+  discountmoney?: number;
   description: string;
   startTime: string;
   endTime: string;
@@ -110,6 +112,11 @@ const DiscountModal: React.FC<DiscountModalProps> = ({
 
   const renderDiscount = ({ item }: { item: Discount }) => {
     const isSelected = selectedDiscount?.id === item.id;
+    const discountType = item.type || 1;
+    const discountDisplay =
+      discountType === 1
+        ? `${item.percent || 0}%`
+        : `${item.discountmoney?.toLocaleString("vi-VN") || 0} VND`;
 
     return (
       <TouchableOpacity
@@ -118,7 +125,7 @@ const DiscountModal: React.FC<DiscountModalProps> = ({
       >
         <View style={styles.discountContent}>
           <View style={styles.discountHeader}>
-            <Text style={styles.discountPercent}>{item.percent}%</Text>
+            <Text style={styles.discountPercent}>{discountDisplay}</Text>
             {isSelected && (
               <Icon
                 name="check-circle"

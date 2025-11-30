@@ -39,7 +39,9 @@ interface Address {
 interface Discount {
   id: number;
   code: string;
+  type?: number;
   percent?: number;
+  discountmoney?: number;
   status: string;
 }
 
@@ -316,27 +318,36 @@ const EditOrderModal: React.FC<EditOrderModalProps> = ({
                     Không áp dụng
                   </Text>
                 </TouchableOpacity>
-                {discounts.map((discount) => (
-                  <TouchableOpacity
-                    key={discount.id}
-                    style={[
-                      styles.discountCard,
-                      selectedDiscountId === discount.id &&
-                        styles.discountCardSelected,
-                    ]}
-                    onPress={() => setSelectedDiscountId(discount.id)}
-                  >
-                    <Text
+                {discounts.map((discount) => {
+                  const discountType = discount.type || 1;
+                  const discountDisplay =
+                    discountType === 1
+                      ? `${discount.percent || 0}%`
+                      : `${
+                          discount.discountmoney?.toLocaleString("vi-VN") || 0
+                        } VND`;
+                  return (
+                    <TouchableOpacity
+                      key={discount.id}
                       style={[
-                        styles.discountText,
+                        styles.discountCard,
                         selectedDiscountId === discount.id &&
-                          styles.discountTextSelected,
+                          styles.discountCardSelected,
                       ]}
+                      onPress={() => setSelectedDiscountId(discount.id)}
                     >
-                      {discount.code} - {discount.percent || 0}%
-                    </Text>
-                  </TouchableOpacity>
-                ))}
+                      <Text
+                        style={[
+                          styles.discountText,
+                          selectedDiscountId === discount.id &&
+                            styles.discountTextSelected,
+                        ]}
+                      >
+                        {discount.code} - {discountDisplay}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
               </ScrollView>
             </View>
 
