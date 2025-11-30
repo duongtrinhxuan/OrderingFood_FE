@@ -233,6 +233,47 @@ export const randomBetween = (min: number, max: number): number => {
   return Math.floor(Math.random() * (max - min + 1)) + min;
 };
 
+// Decode Google Maps polyline string to coordinates array
+export const decodePolyline = (
+  encoded: string
+): Array<{ latitude: number; longitude: number }> => {
+  const poly: Array<{ latitude: number; longitude: number }> = [];
+  let index = 0;
+  const len = encoded.length;
+  let lat = 0;
+  let lng = 0;
+
+  while (index < len) {
+    let b: number;
+    let shift = 0;
+    let result = 0;
+    do {
+      b = encoded.charCodeAt(index++) - 63;
+      result |= (b & 0x1f) << shift;
+      shift += 5;
+    } while (b >= 0x20);
+    const dlat = result & 1 ? ~(result >> 1) : result >> 1;
+    lat += dlat;
+
+    shift = 0;
+    result = 0;
+    do {
+      b = encoded.charCodeAt(index++) - 63;
+      result |= (b & 0x1f) << shift;
+      shift += 5;
+    } while (b >= 0x20);
+    const dlng = result & 1 ? ~(result >> 1) : result >> 1;
+    lng += dlng;
+
+    poly.push({
+      latitude: lat * 1e-5,
+      longitude: lng * 1e-5,
+    });
+  }
+
+  return poly;
+};
+
 // Check if device is online
 export const isOnline = (): Promise<boolean> => {
   return new Promise((resolve) => {

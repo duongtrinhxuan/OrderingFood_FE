@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import {
   View,
   Text,
@@ -14,8 +14,9 @@ import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from "react-native-maps";
 import Icon from "react-native-vector-icons/MaterialIcons";
 import { theme } from "../theme/theme";
 import { api } from "../services/api";
-import { formatDateTime, formatDate } from "../utils/helpers";
+import { formatDateTime, formatDate, decodePolyline } from "../utils/helpers";
 import * as Location from "expo-location";
+import Constants from "expo-constants";
 
 export interface OrderJourney {
   id: number;
@@ -42,6 +43,10 @@ const OrderJourneyModal: React.FC<OrderJourneyModalProps> = ({
 }) => {
   const [journeys, setJourneys] = useState<OrderJourney[]>([]);
   const [loading, setLoading] = useState(false);
+  const [routeCoordinates, setRouteCoordinates] = useState<
+    Array<{ latitude: number; longitude: number }>
+  >([]);
+  const [loadingRoute, setLoadingRoute] = useState(false);
   const [mapPickerVisible, setMapPickerVisible] = useState(false);
   const [editingJourney, setEditingJourney] = useState<OrderJourney | null>(
     null
@@ -109,6 +114,117 @@ const OrderJourneyModal: React.FC<OrderJourneyModalProps> = ({
       loadJourneys();
     }
   }, [visible, loadJourneys]);
+
+  // Fetch route from Google Maps Directions API when journeys change
+  useEffect(() => {
+    if (journeys.length < 2) {
+      setRouteCoordinates([]);
+      setLoadingRoute(false);
+      return;
+    }
+
+    let isMounted = true;
+
+    const fetchRoute = async () => {
+      try {
+        setLoadingRoute(true);
+        const apiKey =
+          Constants.expoConfig?.extra?.googleMapsApiKey ||
+          process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY;
+
+        if (!apiKey) {
+          console.warn("Google Maps API key not found, using straight line");
+          // Fallback to straight line
+          if (isMounted) {
+            const coords = journeys.map((j) => ({
+              latitude: j.latitude,
+              longitude: j.longitude,
+            }));
+            setRouteCoordinates(coords);
+            setLoadingRoute(false);
+          }
+          return;
+        }
+
+        // Build waypoints string for Directions API
+        const origin = `${journeys[0].latitude},${journeys[0].longitude}`;
+        const destination = `${journeys[journeys.length - 1].latitude},${
+          journeys[journeys.length - 1].longitude
+        }`;
+
+        // Get waypoints (all points except origin and destination)
+        const waypointsList =
+          journeys.length > 2
+            ? journeys
+                .slice(1, -1)
+                .map((j) => `${j.latitude},${j.longitude}`)
+                .join("|")
+            : "";
+
+        // Build URL for Directions API
+        let url = `https://maps.googleapis.com/maps/api/directions/json?origin=${origin}&destination=${destination}&key=${apiKey}&language=vi`;
+        if (waypointsList) {
+          url += `&waypoints=${waypointsList}`;
+        }
+
+        const response = await fetch(url);
+        const data = await response.json();
+
+        if (!isMounted) return;
+
+        if (data.status === "OK" && data.routes && data.routes.length > 0) {
+          // Get polyline from the first route
+          const route = data.routes[0];
+          const polyline = route.overview_polyline?.points;
+
+          if (polyline) {
+            // Decode polyline to coordinates
+            const decoded = decodePolyline(polyline);
+            setRouteCoordinates(decoded);
+          } else {
+            // Fallback to straight line if no polyline
+            const coords = journeys.map((j) => ({
+              latitude: j.latitude,
+              longitude: j.longitude,
+            }));
+            setRouteCoordinates(coords);
+          }
+        } else {
+          console.warn(
+            "Google Maps Directions API error:",
+            data.status,
+            "Using straight line"
+          );
+          // Fallback to straight line
+          const coords = journeys.map((j) => ({
+            latitude: j.latitude,
+            longitude: j.longitude,
+          }));
+          setRouteCoordinates(coords);
+        }
+      } catch (error) {
+        console.error("Error fetching route from Google Maps:", error);
+        if (isMounted) {
+          // Fallback to straight line on error
+          const coords = journeys.map((j) => ({
+            latitude: j.latitude,
+            longitude: j.longitude,
+          }));
+          setRouteCoordinates(coords);
+        }
+      } finally {
+        if (isMounted) {
+          setLoadingRoute(false);
+        }
+      }
+    };
+
+    fetchRoute();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [journeys]);
 
   const handleMapPress = (event: any) => {
     const { latitude, longitude } = event.nativeEvent.coordinate;
@@ -288,13 +404,18 @@ const OrderJourneyModal: React.FC<OrderJourneyModalProps> = ({
     }
   };
 
-  const coordinates = journeys.map((j) => ({
-    latitude: j.latitude,
-    longitude: j.longitude,
-  }));
+  // Memoize coordinates to prevent unnecessary re-renders
+  const coordinates = useMemo(
+    () =>
+      journeys.map((j) => ({
+        latitude: j.latitude,
+        longitude: j.longitude,
+      })),
+    [journeys]
+  );
 
-  // Calculate map region to fit all markers
-  const getMapRegion = () => {
+  // Calculate map region to fit all markers - memoized
+  const mapRegion = useMemo(() => {
     if (coordinates.length === 0) {
       return {
         latitude: 10.762622,
@@ -320,7 +441,7 @@ const OrderJourneyModal: React.FC<OrderJourneyModalProps> = ({
       latitudeDelta: Math.max(latDelta, 0.01),
       longitudeDelta: Math.max(lngDelta, 0.01),
     };
-  };
+  }, [coordinates]);
 
   const handleOpenDateTimePicker = () => {
     if (timelineDate) {
@@ -418,24 +539,42 @@ const OrderJourneyModal: React.FC<OrderJourneyModalProps> = ({
                 <MapView
                   provider={PROVIDER_GOOGLE}
                   style={styles.map}
-                  region={getMapRegion()}
+                  region={mapRegion}
                   showsUserLocation={false}
+                  key={`map-${journeys.length}`}
                 >
-                  {coordinates.length > 1 && (
+                  {routeCoordinates.length > 1 && (
                     <Polyline
-                      coordinates={coordinates}
+                      key={`polyline-${routeCoordinates.length}`}
+                      coordinates={routeCoordinates}
                       strokeColor={theme.colors.primary}
-                      strokeWidth={3}
+                      strokeWidth={4}
+                      lineCap="round"
+                      lineJoin="round"
                     />
                   )}
-                  {coordinates.map((coord, idx) => (
+                  {journeys.map((journey, idx) => (
                     <Marker
-                      key={idx}
-                      coordinate={coord}
+                      key={`marker-${journey.id}-${idx}`}
+                      coordinate={{
+                        latitude: journey.latitude,
+                        longitude: journey.longitude,
+                      }}
                       title={`Điểm ${idx + 1}`}
                     />
                   ))}
                 </MapView>
+                {loadingRoute && (
+                  <View style={styles.routeLoadingOverlay}>
+                    <ActivityIndicator
+                      size="small"
+                      color={theme.colors.primary}
+                    />
+                    <Text style={styles.routeLoadingText}>
+                      Đang tải đường đi...
+                    </Text>
+                  </View>
+                )}
               </View>
 
               <FlatList
@@ -865,9 +1004,29 @@ const styles = StyleSheet.create({
   mapContainer: {
     height: 300,
     width: "100%",
+    position: "relative",
   },
   map: {
     flex: 1,
+  },
+  routeLoadingOverlay: {
+    position: "absolute",
+    top: 10,
+    left: 10,
+    right: 10,
+    backgroundColor: "rgba(255, 255, 255, 0.9)",
+    borderRadius: theme.roundness,
+    padding: theme.spacing.sm,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    ...theme.shadows.small,
+    zIndex: 1000,
+  },
+  routeLoadingText: {
+    marginLeft: theme.spacing.xs,
+    fontSize: 12,
+    color: theme.colors.text,
   },
   listContent: {
     padding: theme.spacing.md,
