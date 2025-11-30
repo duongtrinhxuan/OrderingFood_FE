@@ -19,10 +19,14 @@ import ManageAddressModal from "../../components/ManageAddressModal";
 import NotificationsModal, {
   NotificationRecord,
 } from "../../components/NotificationsModal";
-import { useFocusEffect } from "@react-navigation/native";
+import { useFocusEffect, useNavigation } from "@react-navigation/native";
+import { StackNavigationProp } from "@react-navigation/stack";
 import DiscountListModal from "../../components/DiscountListModal";
 
+type ProfileScreenNavigationProp = StackNavigationProp<any, "Profile">;
+
 const ProfileScreen = () => {
+  const navigation = useNavigation<ProfileScreenNavigationProp>();
   const { user, setUser, logout } = useAuth();
   const [refreshing, setRefreshing] = useState(false);
   const [showUpdateModal, setShowUpdateModal] = useState(false);
@@ -191,7 +195,9 @@ const ProfileScreen = () => {
       id: "8",
       title: "Trợ giúp & Hỗ trợ",
       icon: "help",
-      onPress: () => {},
+      onPress: () => {
+        navigation.navigate("ComplaintsList" as never);
+      },
     },
   ];
 

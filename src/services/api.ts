@@ -595,4 +595,32 @@ export const api = {
   deleteOrderJourney(id: number) {
     return request(`/order-journeys/${id}`, "DELETE");
   },
+  // Complaint Report APIs
+  getComplaintReportsByUser(userId: number) {
+    return request(`/complaints-reports/user/${userId}`, "GET");
+  },
+  createComplaintReport(payload: {
+    userId: number;
+    content: string;
+    isDraft?: boolean;
+    isRead?: boolean;
+  }) {
+    return request("/complaints-reports", "POST", payload);
+  },
+  updateComplaintReport(
+    complaintId: number,
+    payload: {
+      content?: string;
+      isDraft?: boolean;
+      isRead?: boolean;
+    }
+  ) {
+    return request(`/complaints-reports/${complaintId}`, "PATCH", payload);
+  },
+  deleteComplaintReport(complaintId: number) {
+    return request(`/complaints-reports/${complaintId}`, "DELETE");
+  },
+  markComplaintReportAsRead(complaintId: number) {
+    return request(`/complaints-reports/${complaintId}/read`, "PATCH");
+  },
 };

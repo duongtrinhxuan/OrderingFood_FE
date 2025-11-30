@@ -4,6 +4,7 @@ import MainTabNavigator from "./MainTabNavigator";
 import RestaurantDetailScreen from "../screens/client/RestaurantDetailScreen";
 import CheckoutScreen from "../screens/client/CheckoutScreen";
 import OrderDetailScreen from "../screens/client/OrderDetailScreen";
+import ComplaintsListScreen from "../screens/client/ComplaintsListScreen";
 
 const Stack = createStackNavigator();
 
@@ -34,6 +35,14 @@ const ClientNavigator = () => {
       <Stack.Screen
         name="OrderDetail"
         component={OrderDetailScreen}
+        options={{
+          headerShown: false,
+          presentation: "modal",
+        }}
+      />
+      <Stack.Screen
+        name="ComplaintsList"
+        component={ComplaintsListScreen}
         options={{
           headerShown: false,
           presentation: "modal",
