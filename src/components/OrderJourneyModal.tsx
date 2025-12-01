@@ -14,9 +14,8 @@ import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from "react-native-maps";
 import Icon from "react-native-vector-icons/MaterialIcons";
 import { theme } from "../theme/theme";
 import { api } from "../services/api";
-import { formatDateTime, formatDate, decodePolyline } from "../utils/helpers";
+import { formatDateTime, formatDate } from "../utils/helpers";
 import * as Location from "expo-location";
-import Constants from "expo-constants";
 
 export interface OrderJourney {
   id: number;
@@ -123,77 +122,79 @@ const OrderJourneyModal: React.FC<OrderJourneyModalProps> = ({
       return;
     }
 
+    // Set initial straight line coordinates immediately so user sees something
+    const initialCoords = journeys.map((j) => ({
+      latitude: j.latitude,
+      longitude: j.longitude,
+    }));
+    setRouteCoordinates(initialCoords);
+
     let isMounted = true;
 
     const fetchRoute = async () => {
       try {
         setLoadingRoute(true);
-        const apiKey =
-          Constants.expoConfig?.extra?.googleMapsApiKey ||
-          process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY;
 
-        if (!apiKey) {
-          console.warn("Google Maps API key not found, using straight line");
-          // Fallback to straight line
-          if (isMounted) {
-            const coords = journeys.map((j) => ({
-              latitude: j.latitude,
-              longitude: j.longitude,
-            }));
-            setRouteCoordinates(coords);
-            setLoadingRoute(false);
-          }
-          return;
-        }
-
-        // Build waypoints string for Directions API
-        const origin = `${journeys[0].latitude},${journeys[0].longitude}`;
-        const destination = `${journeys[journeys.length - 1].latitude},${
-          journeys[journeys.length - 1].longitude
-        }`;
-
-        // Get waypoints (all points except origin and destination)
-        const waypointsList =
+        const origin = {
+          latitude: journeys[0].latitude,
+          longitude: journeys[0].longitude,
+        };
+        const destination = {
+          latitude: journeys[journeys.length - 1].latitude,
+          longitude: journeys[journeys.length - 1].longitude,
+        };
+        const waypoints =
           journeys.length > 2
-            ? journeys
-                .slice(1, -1)
-                .map((j) => `${j.latitude},${j.longitude}`)
-                .join("|")
-            : "";
+            ? journeys.slice(1, -1).map((j) => ({
+                latitude: j.latitude,
+                longitude: j.longitude,
+              }))
+            : undefined;
 
-        // Build URL for Directions API
-        let url = `https://maps.googleapis.com/maps/api/directions/json?origin=${origin}&destination=${destination}&key=${apiKey}&language=vi`;
-        if (waypointsList) {
-          url += `&waypoints=${waypointsList}`;
+        console.log("🗺️ Fetching route from backend...");
+        console.log("📍 Origin:", origin);
+        console.log("📍 Destination:", destination);
+        if (waypoints) {
+          console.log("📍 Waypoints count:", waypoints.length);
         }
 
-        const response = await fetch(url);
-        const data = await response.json();
+        // Call backend API instead of directly calling Google Maps
+        const routeData = await api.getDirectionsRoute({
+          origin,
+          destination,
+          waypoints,
+        });
 
         if (!isMounted) return;
 
-        if (data.status === "OK" && data.routes && data.routes.length > 0) {
-          // Get polyline from the first route
-          const route = data.routes[0];
-          const polyline = route.overview_polyline?.points;
+        if (
+          routeData &&
+          routeData.coordinates &&
+          routeData.coordinates.length > 0
+        ) {
+          // Check if this is a real route (many points) or fallback (few points = straight line)
+          const isRealRoute =
+            routeData.coordinates.length > journeys.length + 5;
 
-          if (polyline) {
-            // Decode polyline to coordinates
-            const decoded = decodePolyline(polyline);
-            setRouteCoordinates(decoded);
+          console.log("✅ Route received from backend:", {
+            pointsCount: routeData.coordinates.length,
+            journeysCount: journeys.length,
+            isRealRoute: isRealRoute,
+            hasPolyline: !!routeData.polyline,
+            firstPoint: routeData.coordinates[0],
+            lastPoint: routeData.coordinates[routeData.coordinates.length - 1],
+          });
+
+          if (isRealRoute) {
+            console.log("🗺️ Using real route from Google Maps");
           } else {
-            // Fallback to straight line if no polyline
-            const coords = journeys.map((j) => ({
-              latitude: j.latitude,
-              longitude: j.longitude,
-            }));
-            setRouteCoordinates(coords);
+            console.warn("⚠️ Received fallback coordinates (straight line)");
           }
+
+          setRouteCoordinates(routeData.coordinates);
         } else {
           console.warn(
-            "Google Maps Directions API error:",
-            data.status,
-            "Using straight line"
+            "⚠️ No coordinates in route response, using straight line"
           );
           // Fallback to straight line
           const coords = journeys.map((j) => ({
@@ -202,8 +203,8 @@ const OrderJourneyModal: React.FC<OrderJourneyModalProps> = ({
           }));
           setRouteCoordinates(coords);
         }
-      } catch (error) {
-        console.error("Error fetching route from Google Maps:", error);
+      } catch (error: any) {
+        console.error("❌ Error fetching route from backend:", error);
         if (isMounted) {
           // Fallback to straight line on error
           const coords = journeys.map((j) => ({
@@ -219,12 +220,19 @@ const OrderJourneyModal: React.FC<OrderJourneyModalProps> = ({
       }
     };
 
-    fetchRoute();
+    // Debounce to avoid multiple calls
+    const timeoutId = setTimeout(() => {
+      fetchRoute();
+    }, 300);
 
     return () => {
       isMounted = false;
+      clearTimeout(timeoutId);
     };
-  }, [journeys]);
+  }, [
+    journeys.length,
+    journeys.map((j) => `${j.latitude},${j.longitude}`).join("|"),
+  ]);
 
   const handleMapPress = (event: any) => {
     const { latitude, longitude } = event.nativeEvent.coordinate;
@@ -543,16 +551,24 @@ const OrderJourneyModal: React.FC<OrderJourneyModalProps> = ({
                   showsUserLocation={false}
                   key={`map-${journeys.length}`}
                 >
-                  {routeCoordinates.length > 1 && (
+                  {routeCoordinates.length > 1 ? (
                     <Polyline
-                      key={`polyline-${routeCoordinates.length}`}
+                      key={`polyline-route-${routeCoordinates.length}`}
                       coordinates={routeCoordinates}
                       strokeColor={theme.colors.primary}
                       strokeWidth={4}
                       lineCap="round"
                       lineJoin="round"
                     />
-                  )}
+                  ) : coordinates.length > 1 ? (
+                    // Fallback: show straight line while loading or if route fetch fails
+                    <Polyline
+                      key={`polyline-straight-${coordinates.length}`}
+                      coordinates={coordinates}
+                      strokeColor={theme.colors.primary}
+                      strokeWidth={3}
+                    />
+                  ) : null}
                   {journeys.map((journey, idx) => (
                     <Marker
                       key={`marker-${journey.id}-${idx}`}

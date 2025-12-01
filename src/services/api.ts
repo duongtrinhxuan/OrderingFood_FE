@@ -623,4 +623,12 @@ export const api = {
   markComplaintReportAsRead(complaintId: number) {
     return request(`/complaints-reports/${complaintId}/read`, "PATCH");
   },
+  // Geocoding APIs
+  getDirectionsRoute(payload: {
+    origin: { latitude: number; longitude: number };
+    destination: { latitude: number; longitude: number };
+    waypoints?: Array<{ latitude: number; longitude: number }>;
+  }) {
+    return request("/geocoding/directions", "POST", payload);
+  },
 };
