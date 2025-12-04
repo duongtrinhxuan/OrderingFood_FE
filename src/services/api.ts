@@ -24,6 +24,22 @@ const resolveApiBaseUrl = () => {
 
 const API_BASE_URL = resolveApiBaseUrl();
 
+// Helper dựng URL ảnh từ đường dẫn tương đối hoặc tuyệt đối
+export const buildImageUrl = (imageUrl?: string | null): string | undefined => {
+  if (!imageUrl) return undefined;
+
+  // Nếu đã là full URL (http/https) thì dùng luôn
+  if (imageUrl.startsWith("http://") || imageUrl.startsWith("https://")) {
+    return imageUrl;
+  }
+
+  // Ngược lại coi như là path tương đối (ví dụ: /uploads/avatars/xxx.jpg)
+  if (imageUrl.startsWith("/")) {
+    return `${API_BASE_URL}${imageUrl}`;
+  }
+  return `${API_BASE_URL}/${imageUrl}`;
+};
+
 // Export API_BASE_URL để các file khác có thể sử dụng
 export { API_BASE_URL };
 

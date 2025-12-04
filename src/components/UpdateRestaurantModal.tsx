@@ -14,7 +14,7 @@ import {
 import Icon from "react-native-vector-icons/MaterialIcons";
 import * as ImagePicker from "expo-image-picker";
 import { theme } from "../theme/theme";
-import { api, API_BASE_URL } from "../services/api";
+import { api, buildImageUrl } from "../services/api";
 
 interface UpdateRestaurantModalProps {
   visible: boolean;
@@ -134,14 +134,8 @@ const UpdateRestaurantModal: React.FC<UpdateRestaurantModalProps> = ({
 
       setUploadingImage(true);
       const uploadResult = await api.uploadAvatar(result.assets[0].uri);
-      let imageUrl = uploadResult.url;
-
-      if (imageUrl.includes("localhost") || imageUrl.includes("127.0.0.1")) {
-        const urlPath = imageUrl.split("/uploads/")[1];
-        imageUrl = `${API_BASE_URL}/uploads/${urlPath}`;
-      }
-
-      handleChange("imageUrl", imageUrl);
+      // Lưu path tương đối trả về từ backend
+      handleChange("imageUrl", uploadResult.url);
       Alert.alert("Thành công", "Ảnh đã được upload.");
     } catch (error: any) {
       Alert.alert("Lỗi", error?.message || "Không thể upload ảnh.");
@@ -281,7 +275,7 @@ const UpdateRestaurantModal: React.FC<UpdateRestaurantModalProps> = ({
               >
                 {form.imageUrl ? (
                   <Image
-                    source={{ uri: form.imageUrl }}
+                    source={{ uri: buildImageUrl(form.imageUrl) }}
                     style={styles.previewImage}
                   />
                 ) : (

@@ -16,7 +16,7 @@ import {
 import Icon from "react-native-vector-icons/MaterialIcons";
 import * as ImagePicker from "expo-image-picker";
 import { theme } from "../../theme/theme";
-import { api, API_BASE_URL } from "../../services/api";
+import { api, buildImageUrl } from "../../services/api";
 
 interface MenuManagementScreenProps {
   restaurantId: number;
@@ -223,14 +223,8 @@ const MenuManagementScreen: React.FC<MenuManagementScreenProps> = ({
 
       setUploadingImage(true);
       const uploadResult = await api.uploadAvatar(result.assets[0].uri);
-      let imageUrl = uploadResult.url;
-
-      if (imageUrl.includes("localhost") || imageUrl.includes("127.0.0.1")) {
-        const urlPath = imageUrl.split("/uploads/")[1];
-        imageUrl = `${API_BASE_URL}/uploads/${urlPath}`;
-      }
-
-      setProductForm({ ...productForm, imageUrl });
+      // Backend trả về path tương đối, lưu nguyên path này
+      setProductForm({ ...productForm, imageUrl: uploadResult.url });
       Alert.alert("Thành công", "Ảnh đã được upload.");
     } catch (error: any) {
       Alert.alert("Lỗi", error?.message || "Không thể upload ảnh.");
@@ -429,7 +423,7 @@ const MenuManagementScreen: React.FC<MenuManagementScreenProps> = ({
       <Image
         source={{
           uri:
-            item.imageUrl ||
+            buildImageUrl(item.imageUrl) ||
             "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?fit=crop&w=800&q=80",
         }}
         style={styles.productImage}
@@ -749,7 +743,7 @@ const MenuManagementScreen: React.FC<MenuManagementScreenProps> = ({
               >
                 {productForm.imageUrl ? (
                   <Image
-                    source={{ uri: productForm.imageUrl }}
+                    source={{ uri: buildImageUrl(productForm.imageUrl) }}
                     style={styles.previewImage}
                   />
                 ) : (

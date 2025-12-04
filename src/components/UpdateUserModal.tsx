@@ -14,7 +14,7 @@ import {
 import Icon from "react-native-vector-icons/MaterialIcons";
 import * as ImagePicker from "expo-image-picker";
 import { theme } from "../theme/theme";
-import { api, API_BASE_URL } from "../services/api";
+import { api, buildImageUrl } from "../services/api";
 
 interface UpdateUserModalProps {
   visible: boolean;
@@ -83,15 +83,8 @@ const UpdateUserModal: React.FC<UpdateUserModalProps> = ({
         setUploadingImage(true);
         try {
           const uploadResult = await api.uploadAvatar(result.assets[0].uri);
-          const imageUrl = uploadResult.url;
-
-          // Fix localhost URL if needed
-          const fixedUrl = imageUrl.replace(
-            /http:\/\/localhost:\d+/,
-            API_BASE_URL
-          );
-
-          handleChange("avatar", fixedUrl);
+          // Backend trả về path tương đối, lưu nguyên path
+          handleChange("avatar", uploadResult.url);
           Alert.alert("Thành công", "Ảnh đại diện đã được tải lên.");
         } catch (error: any) {
           console.error("Upload avatar error:", error);
@@ -185,7 +178,7 @@ const UpdateUserModal: React.FC<UpdateUserModalProps> = ({
                 <Image
                   source={{
                     uri:
-                      form.avatar ||
+                      buildImageUrl(form.avatar) ||
                       "https://images.unsplash.com/photo-1521572267360-ee0c2909d518?fit=crop&w=200&h=200",
                   }}
                   style={styles.avatarPreview}

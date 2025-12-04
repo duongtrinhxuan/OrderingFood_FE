@@ -19,7 +19,7 @@ import * as ImagePicker from "expo-image-picker";
 
 import { theme } from "../../theme/theme";
 import { useAuth } from "../../context/AuthContext";
-import { api, API_BASE_URL } from "../../services/api";
+import { api, buildImageUrl } from "../../services/api";
 import { SellerStackParamList } from "../../navigation/SellerNavigator";
 import { StackNavigationProp } from "@react-navigation/stack";
 import CreateRestaurantModal from "../../components/CreateRestaurantModal";
@@ -217,28 +217,19 @@ const SellerProfileScreen: React.FC<Props> = ({ navigation }) => {
       setUploadingAvatar(true);
       const asset = result.assets[0];
 
-      // Upload ảnh lên backend
+      // Upload ảnh lên backend: backend trả về path tương đối
       const uploadResult = await api.uploadAvatar(asset.uri);
-      let downloadUrl = uploadResult.url;
+      const avatarPath = uploadResult.url;
 
-      // Sửa URL nếu có localhost thành IP thực tế từ API_BASE_URL
-      if (
-        downloadUrl.includes("localhost") ||
-        downloadUrl.includes("127.0.0.1")
-      ) {
-        const urlPath = downloadUrl.split("/uploads/")[1];
-        downloadUrl = `${API_BASE_URL}/uploads/${urlPath}`;
-      }
+      console.log("Avatar path:", avatarPath);
 
-      console.log("Avatar URL:", downloadUrl);
-
-      // Cập nhật avatar URL vào database
-      await api.updateUser(user.id, { avatar: downloadUrl });
+      // Cập nhật avatar path vào database
+      await api.updateUser(user.id, { avatar: avatarPath });
 
       // Cập nhật cả user và profile state ngay lập tức
       const updatedUser = {
         ...user,
-        avatar: downloadUrl,
+        avatar: avatarPath,
       };
       setUser(updatedUser);
 
@@ -246,7 +237,7 @@ const SellerProfileScreen: React.FC<Props> = ({ navigation }) => {
       if (profile) {
         setProfile({
           ...profile,
-          avatar: downloadUrl,
+          avatar: avatarPath,
         });
       }
 
@@ -384,8 +375,7 @@ const SellerProfileScreen: React.FC<Props> = ({ navigation }) => {
   // Ưu tiên avatar từ user state (được cập nhật ngay sau upload)
   // sau đó mới dùng profile?.avatar
   const avatarUri =
-    user?.avatar ||
-    profile?.avatar ||
+    buildImageUrl(user?.avatar || profile?.avatar) ||
     "https://images.unsplash.com/photo-1544723795-3fb6469f5b39?fit=crop&w=400&h=400";
 
   return (
@@ -509,7 +499,7 @@ const SellerProfileScreen: React.FC<Props> = ({ navigation }) => {
             <Image
               source={{
                 uri:
-                  item.imageUrl ||
+                  buildImageUrl(item.imageUrl) ||
                   "https://images.unsplash.com/photo-1540189549336-e6e99c3679fe?fit=crop&w=800&q=80",
               }}
               style={styles.restaurantImage}
