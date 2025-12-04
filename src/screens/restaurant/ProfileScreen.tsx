@@ -16,7 +16,7 @@ import Icon from "react-native-vector-icons/MaterialIcons";
 import { LinearGradient } from "expo-linear-gradient";
 import { theme } from "../../theme/theme";
 import { useAuth } from "../../context/AuthContext";
-import { api } from "../../services/api";
+import { api, buildImageUrl } from "../../services/api";
 import { formatPrice } from "../../utils/helpers";
 import UpdateRestaurantModal from "../../components/UpdateRestaurantModal";
 import UpdateAddressModal from "../../components/UpdateAddressModal";
@@ -243,7 +243,7 @@ const RestaurantProfileScreen: React.FC<RestaurantProfileScreenProps> = ({
             <Image
               source={{
                 uri:
-                  restaurant.imageUrl ||
+                  buildImageUrl(restaurant.imageUrl) ||
                   "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?fit=crop&w=800&q=80",
               }}
               style={styles.avatar}
