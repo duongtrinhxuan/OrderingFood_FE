@@ -159,6 +159,18 @@ const DashboardScreen: React.FC<DashboardScreenComponentProps> = ({
     loadDashboardStats();
   }, [loadDashboardStats]);
 
+  // Debug customersToday
+  useEffect(() => {
+    if (dashboardStats) {
+      console.log(
+        "[Dashboard] customersToday:",
+        dashboardStats.customersToday,
+        "customersChange:",
+        dashboardStats.customersChange
+      );
+    }
+  }, [dashboardStats]);
+
   const formatPercent = (value?: number | null) => {
     if (value === null || value === undefined) {
       return "0%";
