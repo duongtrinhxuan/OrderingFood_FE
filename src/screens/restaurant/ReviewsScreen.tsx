@@ -13,7 +13,7 @@ import {
 } from "react-native";
 import Icon from "react-native-vector-icons/MaterialIcons";
 import { theme } from "../../theme/theme";
-import { api } from "../../services/api";
+import { api, buildImageUrl } from "../../services/api";
 import { useAuth } from "../../context/AuthContext";
 import { formatDateTime } from "../../utils/helpers";
 import { useRoute } from "@react-navigation/native";
@@ -396,7 +396,10 @@ const ReviewsScreen = () => {
         <Text style={styles.orderItems}>{getOrderItems(item.order)}</Text>
         <Text style={styles.comment}>{item.content}</Text>
         {item.imageUrl ? (
-          <Image source={{ uri: item.imageUrl }} style={styles.feedbackImage} />
+          <Image
+            source={{ uri: buildImageUrl(item.imageUrl) || undefined }}
+            style={styles.feedbackImage}
+          />
         ) : null}
 
         {existingResponse ? (
@@ -427,7 +430,9 @@ const ReviewsScreen = () => {
               </View>
               {existingResponse.imageUrl ? (
                 <Image
-                  source={{ uri: existingResponse.imageUrl }}
+                  source={{
+                    uri: buildImageUrl(existingResponse.imageUrl) || undefined,
+                  }}
                   style={styles.responseImage}
                 />
               ) : null}
@@ -518,7 +523,9 @@ const ReviewsScreen = () => {
             </TouchableOpacity>
             {responseForm.imageUrl ? (
               <Image
-                source={{ uri: responseForm.imageUrl }}
+                source={{
+                  uri: buildImageUrl(responseForm.imageUrl) || undefined,
+                }}
                 style={styles.responseImagePreview}
               />
             ) : null}

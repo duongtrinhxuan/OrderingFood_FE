@@ -21,8 +21,42 @@ const App = () => {
   const [isLoading, setIsLoading] = useState(true);
 
   const isAuthenticated = Boolean(user);
+
+  // Debug: Log user và roleId để kiểm tra
+  React.useEffect(() => {
+    if (user) {
+      console.log("[App] User logged in:", JSON.stringify(user, null, 2));
+      console.log(
+        "[App] User roleId:",
+        user.roleId,
+        "type:",
+        typeof user.roleId
+      );
+      // Kiểm tra cả number và string
+      const roleIdNum =
+        typeof user.roleId === "string"
+          ? parseInt(user.roleId, 10)
+          : user.roleId;
+      console.log("[App] User roleId (parsed):", roleIdNum);
+      console.log("[App] User roleId === 2?", roleIdNum === 2);
+    }
+  }, [user]);
+
+  // Xử lý cả trường hợp roleId là number hoặc string
+  const roleIdNum = user?.roleId
+    ? typeof user.roleId === "string"
+      ? parseInt(user.roleId, 10)
+      : user.roleId
+    : 1;
   const userRole: UserRole =
-    user?.roleId === 2 ? "restaurant" : ("client" as UserRole);
+    roleIdNum === 2 ? "restaurant" : ("client" as UserRole);
+
+  console.log(
+    "[App] Calculated userRole:",
+    userRole,
+    "from roleId:",
+    roleIdNum
+  );
 
   // Auto-login từ token khi app khởi động
   useEffect(() => {

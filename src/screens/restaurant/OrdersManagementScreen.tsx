@@ -14,7 +14,7 @@ import {
 import Icon from "react-native-vector-icons/MaterialIcons";
 import { theme } from "../../theme/theme";
 import { useAuth } from "../../context/AuthContext";
-import { api } from "../../services/api";
+import { api, buildImageUrl } from "../../services/api";
 import { formatDateTime, formatPrice } from "../../utils/helpers";
 import { useRoute } from "@react-navigation/native";
 import OrderJourneyModal from "../../components/OrderJourneyModal";
@@ -480,7 +480,7 @@ const OrdersManagementScreen: React.FC<
         ) : null}
         {feedback.imageUrl ? (
           <Image
-            source={{ uri: feedback.imageUrl }}
+            source={{ uri: buildImageUrl(feedback.imageUrl) || undefined }}
             style={styles.detailFeedbackImage}
           />
         ) : null}
