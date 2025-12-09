@@ -23,6 +23,7 @@ import { api, buildImageUrl } from "../../services/api";
 import { SellerStackParamList } from "../../navigation/SellerNavigator";
 import { StackNavigationProp } from "@react-navigation/stack";
 import CreateRestaurantModal from "../../components/CreateRestaurantModal";
+import TransferInfoModal from "../../components/TransferInfoModal";
 
 type SellerProfileScreenNavigationProp = StackNavigationProp<
   SellerStackParamList,
@@ -589,39 +590,11 @@ const SellerProfileScreen: React.FC<Props> = ({ navigation }) => {
           </ScrollView>
         </View>
       </Modal>
-      <Modal
+      <TransferInfoModal
         visible={showPaymentModal}
-        animationType="slide"
-        presentationStyle="pageSheet"
-        onRequestClose={() => setShowPaymentModal(false)}
-      >
-        <View style={styles.modalScreen}>
-          <View style={styles.modalHeaderBar}>
-            <TouchableOpacity
-              onPress={() => setShowPaymentModal(false)}
-              style={styles.modalHeaderButton}
-            >
-              <Icon name="arrow-back" size={24} color={theme.colors.text} />
-            </TouchableOpacity>
-            <Text style={styles.modalHeaderTitle}>Thông tin thanh toán</Text>
-            <View style={styles.modalHeaderSpacer} />
-          </View>
-          <ScrollView
-            style={styles.modalBody}
-            contentContainerStyle={styles.modalBodyContent}
-            showsVerticalScrollIndicator={false}
-          >
-            <View style={styles.emptyState}>
-              <Icon name="credit-card" size={40} color={theme.colors.primary} />
-              <Text style={styles.emptyStateTitle}>Đang phát triển</Text>
-              <Text style={styles.emptyStateDescription}>
-                Khu vực quản lý thông tin thanh toán sẽ sớm được cập nhật. Vui
-                lòng quay lại sau.
-              </Text>
-            </View>
-          </ScrollView>
-        </View>
-      </Modal>
+        onClose={() => setShowPaymentModal(false)}
+        userId={user?.id || 0}
+      />
     </ScrollView>
   );
 };

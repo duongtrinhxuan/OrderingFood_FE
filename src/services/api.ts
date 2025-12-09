@@ -3,6 +3,15 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 
 type HttpMethod = "GET" | "POST" | "PATCH" | "DELETE";
 
+export type TransferInformationPayload = {
+  paymentMethod: "COD" | "TKNH" | "MOMO" | "ZALOPAY";
+  isBank?: boolean;
+  nameBank?: string;
+  accountNumber?: string;
+  isActive?: boolean;
+  userId?: number;
+};
+
 const resolveApiBaseUrl = () => {
   const envUrl = process.env.EXPO_PUBLIC_API_URL;
   if (envUrl && envUrl.trim().length > 0) {
@@ -312,6 +321,25 @@ export const api = {
   },
   deleteUserAddress(userAddressId: number) {
     return request(`/user-addresses/${userAddressId}`, "DELETE");
+  },
+  // Transfer Information APIs
+  getTransferInfosByUser(userId: number) {
+    return request(`/transfer-informations/user/${userId}`, "GET");
+  },
+  createTransferInfo(userId: number, payload: TransferInformationPayload) {
+    return request("/transfer-informations", "POST", {
+      ...payload,
+      userId,
+    });
+  },
+  updateTransferInfo(
+    id: number,
+    payload: Omit<TransferInformationPayload, "userId">
+  ) {
+    return request(`/transfer-informations/${id}`, "PATCH", payload);
+  },
+  deleteTransferInfo(id: number) {
+    return request(`/transfer-informations/${id}`, "DELETE");
   },
   // Menu APIs
   getMenusByRestaurant(restaurantId: number) {
