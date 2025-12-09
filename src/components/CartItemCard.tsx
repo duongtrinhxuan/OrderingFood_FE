@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity, Image } from "react-native";
 import Icon from "react-native-vector-icons/MaterialIcons";
 import { theme } from "../theme/theme";
 import { formatPrice } from "../utils/helpers";
+import { buildImageUrl } from "../services/api";
 
 interface CartItemCardProps {
   cartItem: {
@@ -31,12 +32,15 @@ const CartItemCard: React.FC<CartItemCardProps> = ({
   onDecrease,
   onRemove,
 }) => {
+  const imageUri = buildImageUrl(cartItem.product.imageUrl);
+
   return (
     <View style={styles.container}>
       <Image
         source={{
           uri:
-            cartItem.product.imageUrl || "https://via.placeholder.com/100x100",
+            imageUri ||
+            "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?fit=crop&w=400&q=60",
         }}
         style={styles.image}
       />

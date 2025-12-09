@@ -2,6 +2,7 @@ import React from "react";
 import { View, Text, StyleSheet, Image, TextInput } from "react-native";
 import { theme } from "../theme/theme";
 import { formatPrice } from "../utils/helpers";
+import { buildImageUrl } from "../services/api";
 
 interface OrderDetailCardProps {
   cartItem: {
@@ -28,12 +29,15 @@ const OrderDetailCard: React.FC<OrderDetailCardProps> = ({
   note,
   onNoteChange,
 }) => {
+  const imageUri = buildImageUrl(cartItem.product.imageUrl);
+
   return (
     <View style={styles.container}>
       <Image
         source={{
           uri:
-            cartItem.product.imageUrl || "https://via.placeholder.com/100x100",
+            imageUri ||
+            "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?fit=crop&w=400&q=60",
         }}
         style={styles.image}
       />

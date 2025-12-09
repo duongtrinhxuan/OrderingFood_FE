@@ -10,6 +10,7 @@ import {
   Modal,
   Image,
   ScrollView,
+  Alert,
 } from "react-native";
 import Icon from "react-native-vector-icons/MaterialIcons";
 import { theme } from "../../theme/theme";
@@ -235,7 +236,38 @@ const OrdersManagementScreen: React.FC<
       setSelectedStatusOption(null);
       loadOrders();
     } catch (error) {
-      console.error("Error updating order status:", error);
+      const raw = (error as any)?.message || "";
+      let parsedMsg = raw;
+      try {
+        const json = JSON.parse(raw);
+        parsedMsg = json?.message || raw;
+      } catch {
+        // keep raw
+      }
+      if (
+        typeof parsedMsg === "string" &&
+        parsedMsg.includes("Thanh toán chưa hoàn tất")
+      ) {
+        Alert.alert(
+          "Không thể cập nhật",
+          "Đơn hàng chưa được thanh toán. Vui lòng xác nhận thanh toán trước khi đổi trạng thái."
+        );
+      } else if (
+        typeof parsedMsg === "string" &&
+        parsedMsg.includes("COD chưa thanh toán")
+      ) {
+        Alert.alert(
+          "Không thể hoàn thành",
+          "Đơn COD chưa thanh toán. Cần xác nhận đã nhận tiền trước khi hoàn thành."
+        );
+      } else {
+        Alert.alert(
+          "Lỗi",
+          typeof parsedMsg === "string"
+            ? parsedMsg
+            : "Không thể cập nhật trạng thái đơn hàng."
+        );
+      }
     } finally {
       setUpdatingStatus(false);
     }
@@ -257,15 +289,23 @@ const OrdersManagementScreen: React.FC<
     }
   };
 
+  const getLatestPayment = (order?: Order) => {
+    if (!order?.payments || order.payments.length === 0) return null;
+    return order.payments.reduce((latest, current) => {
+      if (!current) return latest;
+      if (!latest) return current;
+      const lt = latest.createdAt ? new Date(latest.createdAt).getTime() : 0;
+      const ct = current.createdAt ? new Date(current.createdAt).getTime() : 0;
+      return ct > lt ? current : latest;
+    }, null as any);
+  };
+
   const getOrderPaymentStatusText = (order: Order) => {
-    if (order.status !== 4 || !order.payments?.length) {
-      return null;
-    }
-    const hasPaid = order.payments.some((p) => p && p.status === 2);
-    const allPending = order.payments.every((p) => p && p.status === 1);
-    if (hasPaid) return "Đã thanh toán";
-    if (allPending) return "Chưa thanh toán";
-    return null;
+    const latest = getLatestPayment(order);
+    if (!latest) return "Chưa có thông tin thanh toán";
+    if (latest.status === 2) return "Đã thanh toán";
+    if (latest.status === 1) return "Chưa thanh toán";
+    return "Chưa có thông tin thanh toán";
   };
 
   const handleOpenPaymentStatusModal = () => {
@@ -429,33 +469,29 @@ const OrdersManagementScreen: React.FC<
           </TouchableOpacity>
         </View>
 
-        {paymentStatusText && (
-          <View style={styles.paymentStatusRow}>
-            <Icon
-              name={
-                paymentStatusText === "Đã thanh toán"
-                  ? "check-circle"
-                  : "payment"
-              }
-              size={16}
-              color={
-                paymentStatusText === "Đã thanh toán"
-                  ? theme.colors.success
-                  : theme.colors.warning
-              }
-            />
-            <Text
-              style={[
-                styles.paymentStatusText,
-                paymentStatusText === "Đã thanh toán"
-                  ? { color: theme.colors.success }
-                  : { color: theme.colors.warning },
-              ]}
-            >
-              {paymentStatusText}
-            </Text>
-          </View>
-        )}
+        <View style={styles.paymentStatusRow}>
+          <Icon
+            name={
+              paymentStatusText === "Đã thanh toán" ? "check-circle" : "payment"
+            }
+            size={16}
+            color={
+              paymentStatusText === "Đã thanh toán"
+                ? theme.colors.success
+                : theme.colors.warning
+            }
+          />
+          <Text
+            style={[
+              styles.paymentStatusText,
+              paymentStatusText === "Đã thanh toán"
+                ? { color: theme.colors.success }
+                : { color: theme.colors.warning },
+            ]}
+          >
+            {paymentStatusText}
+          </Text>
+        </View>
       </TouchableOpacity>
     );
   };
@@ -494,17 +530,7 @@ const OrdersManagementScreen: React.FC<
     const addressText = getAddressText(selectedOrder);
     const total =
       (selectedOrder.totalPrice || 0) + (selectedOrder.shippingFee || 0);
-    const latestPayment = selectedOrder.payments?.reduce((latest, current) => {
-      if (!current) return latest;
-      if (!latest) return current;
-      const latestTime = (latest as any).createdAt
-        ? new Date((latest as any).createdAt).getTime()
-        : 0;
-      const currentTime = (current as any).createdAt
-        ? new Date((current as any).createdAt).getTime()
-        : 0;
-      return currentTime > latestTime ? current : latest;
-    }, null as any);
+    const latestPayment = getLatestPayment(selectedOrder);
     const paymentMethod = latestPayment?.paymentMethod || "Chưa cập nhật";
     const discountText = selectedOrder.discount?.code
       ? `${selectedOrder.discount.code}${

@@ -87,6 +87,8 @@ const OrderDetailScreen = () => {
   const [journeyModalVisible, setJourneyModalVisible] = useState(false);
   const [editOrderModalVisible, setEditOrderModalVisible] = useState(false);
   const [addPaymentModalVisible, setAddPaymentModalVisible] = useState(false);
+  const [transferInfos, setTransferInfos] = useState<any[]>([]);
+  const [loadingTransferInfos, setLoadingTransferInfos] = useState(false);
 
   const loadOrder = useCallback(async () => {
     try {
@@ -104,6 +106,27 @@ const OrderDetailScreen = () => {
     loadOrder();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [orderId]);
+
+  useEffect(() => {
+    const loadTransfers = async () => {
+      if (!order?.restaurant) return;
+      const ownerId =
+        (order.restaurant as any).userId ||
+        (order.restaurant as any).ownerId ||
+        (order.restaurant as any).createdById;
+      if (!ownerId) return;
+      try {
+        setLoadingTransferInfos(true);
+        const data = await api.getTransferInfosByUser(ownerId);
+        setTransferInfos(Array.isArray(data) ? data : []);
+      } catch (error) {
+        console.error("Error loading transfer informations:", error);
+      } finally {
+        setLoadingTransferInfos(false);
+      }
+    };
+    loadTransfers();
+  }, [order?.restaurant]);
 
   const existingFeedback = order?.feedbacks?.[0] || null;
 
@@ -124,21 +147,9 @@ const OrderDetailScreen = () => {
     return `${street}, ${ward}, ${district}, ${province}`;
   };
 
-  const getPaymentMethod = () => {
-    if (!order?.payments || order.payments.length === 0) {
-      return "Không có thông tin";
-    }
-    // Nếu status = 4, hiển thị tất cả payments
-    if (order.status === 4) {
-      return (
-        order.payments
-          .map((p) => p?.paymentMethod || "")
-          .filter((method) => method !== "")
-          .join(", ") || "Không có thông tin"
-      );
-    }
-    // Với các status khác, chỉ hiển thị payment mới nhất
-    const latestPayment = order.payments.reduce((latest, current) => {
+  const getLatestPayment = () => {
+    if (!order?.payments || order.payments.length === 0) return null;
+    return order.payments.reduce((latest, current) => {
       if (!current) return latest;
       if (!latest) return current;
       const latestTime = (latest as any).createdAt
@@ -149,17 +160,21 @@ const OrderDetailScreen = () => {
         : 0;
       return currentTime > latestTime ? current : latest;
     }, null as any);
+  };
+
+  const getPaymentMethod = () => {
+    const latestPayment = getLatestPayment();
     return latestPayment?.paymentMethod || "Không có thông tin";
   };
 
   const getPaymentStatusText = () => {
-    if (!order || order.status !== 4 || !order.payments?.length) {
+    if (!order || !order.payments?.length) {
       return null;
     }
-    const hasPaid = order.payments.some((p) => p && p.status === 2);
-    const allPending = order.payments.every((p) => p && p.status === 1);
-    if (hasPaid) return "Đã thanh toán";
-    if (allPending) return "Chưa thanh toán";
+    const latestPayment = getLatestPayment();
+    if (!latestPayment) return null;
+    if (latestPayment.status === 2) return "Đã thanh toán";
+    if (latestPayment.status === 1) return "Chưa thanh toán";
     return null;
   };
 
@@ -240,6 +255,87 @@ const OrderDetailScreen = () => {
   const shippingFee = order.shippingFee || 0;
   const total = subtotal + shippingFee;
   const paymentStatusText = getPaymentStatusText();
+  const latestPayment = getLatestPayment();
+  const paymentZalo =
+    latestPayment?.paymentMethod?.toUpperCase() === "ZALOPAY"
+      ? latestPayment
+      : null;
+  const activePaymentMethod = getPaymentMethod();
+  const transferInfosFiltered = transferInfos.filter((t) =>
+    activePaymentMethod
+      ? (t.paymentMethod || "").toUpperCase() ===
+        (activePaymentMethod || "").toUpperCase()
+      : true
+  );
+
+  const renderTransferCard = (info: any, idx: number) => {
+    // Ưu tiên format QR Zalopay chính thức theo số điện thoại ví
+    const zalopayPhone =
+      info.paymentMethod?.toUpperCase() === "ZALOPAY" && info.isBank === false
+        ? info.accountNumber
+        : undefined;
+    // Nếu isBank=true: sinh VietQR (bank transfer) để Zalopay quét được
+    const zalopayAmount = Math.max(0, Math.round(total || 0));
+    const note = `Thanh toan don hang ${order.id}`;
+    const bankCode = (info.nameBank || "").trim().toLowerCase().includes("acb")
+      ? "acb"
+      : undefined;
+
+    const qrUrl =
+      info.isBank === true && bankCode && info.accountNumber
+        ? `https://img.vietqr.io/image/${bankCode}-${encodeURIComponent(
+            info.accountNumber
+          )}-qr_only.png?amount=${zalopayAmount}&addInfo=${encodeURIComponent(
+            note
+          )}`
+        : `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(
+            zalopayPhone
+              ? `zalopay://quickpay?phone=${encodeURIComponent(
+                  zalopayPhone
+                )}&amount=${encodeURIComponent(
+                  zalopayAmount
+                )}&note=${encodeURIComponent(note)}`
+              : `ZALOPAY|${info.accountNumber || ""}|${
+                  info.nameBank || ""
+                }|${zalopayAmount}|order:${order.id}`
+          )}`;
+    return (
+      <View key={`${info.id || idx}`} style={styles.transferCard}>
+        <View style={styles.transferRow}>
+          <Text style={styles.transferLabel}>Phương thức:</Text>
+          <Text style={styles.transferValue}>
+            {info.paymentMethod || "ZALOPAY"}
+          </Text>
+        </View>
+        {info.nameBank ? (
+          <View style={styles.transferRow}>
+            <Text style={styles.transferLabel}>Ngân hàng:</Text>
+            <Text style={styles.transferValue}>{info.nameBank}</Text>
+          </View>
+        ) : null}
+        {info.accountNumber ? (
+          <View style={styles.transferRow}>
+            <Text style={styles.transferLabel}>
+              {info.paymentMethod === "ZALOPAY" && info.isBank === false
+                ? "SĐT Zalopay"
+                : "Số tài khoản"}
+              :
+            </Text>
+            <Text style={styles.transferValue}>{info.accountNumber}</Text>
+          </View>
+        ) : null}
+        {paymentZalo ? (
+          <View style={styles.qrContainer}>
+            <Text style={styles.qrTitle}>Quét QR để thanh toán Zalopay</Text>
+            <Image source={{ uri: qrUrl }} style={styles.qrImage} />
+            <Text style={styles.qrAmount}>
+              Số tiền: {formatPrice(total || 0)}
+            </Text>
+          </View>
+        ) : null}
+      </View>
+    );
+  };
 
   return (
     <View style={styles.container}>
@@ -406,8 +502,10 @@ const OrderDetailScreen = () => {
                 <Image
                   source={{
                     uri:
-                      buildImageUrl(detail.product?.imageUrl) ||
-                      "https://via.placeholder.com/80x80",
+                      buildImageUrl(
+                        detail.product?.imageUrl ||
+                          (detail.product as any)?.image
+                      ) || "https://via.placeholder.com/80x80",
                   }}
                   style={styles.productImage}
                 />
@@ -490,30 +588,12 @@ const OrderDetailScreen = () => {
         {/* Payment Method */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Phương thức thanh toán</Text>
-          {order.status === 4 && order.payments && order.payments.length > 0 ? (
-            // Hiển thị tất cả payments cho status = 4
-            <>
-              {order.payments.map((payment, index) => (
-                <View key={payment?.id || index} style={styles.infoCard}>
-                  <View style={styles.paymentMethodRow}>
-                    <Icon
-                      name="payment"
-                      size={18}
-                      color={theme.colors.primary}
-                    />
-                    <Text style={styles.infoValue}>
-                      {payment?.paymentMethod || "Không xác định"}
-                    </Text>
-                  </View>
-                </View>
-              ))}
-            </>
-          ) : (
-            // Hiển thị payment method cho các status khác
-            <View style={styles.infoCard}>
+          <View style={styles.infoCard}>
+            <View style={styles.paymentMethodRow}>
+              <Icon name="payment" size={18} color={theme.colors.primary} />
               <Text style={styles.infoValue}>{getPaymentMethod()}</Text>
             </View>
-          )}
+          </View>
           {paymentStatusText && (
             <>
               <View style={[styles.infoCard, styles.paymentStatusCard]}>
@@ -561,6 +641,21 @@ const OrderDetailScreen = () => {
                 )}
             </>
           )}
+
+          <View style={styles.transferSection}>
+            <Text style={styles.sectionSubtitle}>
+              Thông tin thanh toán (theo phương thức {activePaymentMethod})
+            </Text>
+            {loadingTransferInfos ? (
+              <ActivityIndicator color={theme.colors.primary} />
+            ) : transferInfosFiltered.length === 0 ? (
+              <Text style={styles.infoValue}>
+                Chưa có thông tin thanh toán cho phương thức này.
+              </Text>
+            ) : (
+              transferInfosFiltered.map(renderTransferCard)
+            )}
+          </View>
         </View>
 
         {/* Summary */}
@@ -996,6 +1091,68 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: theme.colors.primary,
     marginLeft: theme.spacing.xs,
+  },
+  transferSection: {
+    marginTop: theme.spacing.md,
+    gap: theme.spacing.sm,
+  },
+  sectionSubtitle: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: theme.colors.mediumGray,
+    marginBottom: theme.spacing.xs,
+  },
+  transferCard: {
+    backgroundColor: theme.colors.surface,
+    borderRadius: theme.roundness,
+    padding: theme.spacing.md,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    gap: theme.spacing.xs,
+  },
+  transferRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+  },
+  transferLabel: {
+    color: theme.colors.mediumGray,
+    fontSize: 13,
+  },
+  transferValue: {
+    color: theme.colors.text,
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  qrContainer: {
+    marginTop: theme.spacing.sm,
+    alignItems: "center",
+  },
+  qrTitle: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: theme.colors.text,
+    marginBottom: theme.spacing.xs,
+  },
+  qrImage: {
+    width: 160,
+    height: 160,
+    marginVertical: theme.spacing.xs,
+  },
+  qrAmount: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: theme.colors.primary,
+  },
+  zaloLinkButton: {
+    marginTop: theme.spacing.xs,
+    paddingVertical: theme.spacing.sm,
+    paddingHorizontal: theme.spacing.md,
+    backgroundColor: theme.colors.primary,
+    borderRadius: theme.roundness,
+  },
+  zaloLinkButtonText: {
+    color: theme.colors.surface,
+    fontWeight: "700",
   },
   paymentMethodRow: {
     flexDirection: "row",
