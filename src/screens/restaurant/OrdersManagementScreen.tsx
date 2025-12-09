@@ -404,14 +404,24 @@ const OrdersManagementScreen: React.FC<
         style={styles.orderCard}
       >
         <View style={styles.orderHeader}>
-          <View>
-            <Text style={styles.orderId}>#{item.id}</Text>
-            <Text style={styles.customerName}>
-              {item.user?.username || "Khách hàng"}
-            </Text>
-            <Text style={styles.orderTime}>
-              {formatDateTime(item.createdAt)}
-            </Text>
+          <View style={styles.customerRow}>
+            <Image
+              source={{
+                uri:
+                  buildImageUrl(item.user?.avatar) ||
+                  "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?fit=crop&w=200&q=60",
+              }}
+              style={styles.avatar}
+            />
+            <View>
+              <Text style={styles.orderId}>#{item.id}</Text>
+              <Text style={styles.customerName}>
+                {item.user?.username || "Khách hàng"}
+              </Text>
+              <Text style={styles.orderTime}>
+                {formatDateTime(item.createdAt)}
+              </Text>
+            </View>
           </View>
           <View
             style={[styles.statusBadge, { backgroundColor: statusInfo.color }]}
@@ -915,6 +925,17 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: theme.colors.background,
+  },
+  customerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing.sm,
+  },
+  avatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: theme.colors.lightGray,
   },
   filtersContainer: {
     backgroundColor: theme.colors.surface,
