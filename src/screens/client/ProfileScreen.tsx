@@ -13,7 +13,7 @@ import Icon from "react-native-vector-icons/MaterialIcons";
 import { LinearGradient } from "expo-linear-gradient";
 import { theme } from "../../theme/theme";
 import { useAuth } from "../../context/AuthContext";
-import { api } from "../../services/api";
+import { api, buildImageUrl } from "../../services/api";
 import UpdateUserModal from "../../components/UpdateUserModal";
 import ManageAddressModal from "../../components/ManageAddressModal";
 import NotificationsModal, {
@@ -242,7 +242,7 @@ const ProfileScreen = () => {
             <Image
               source={{
                 uri:
-                  user?.avatar ||
+                  buildImageUrl(user?.avatar) ||
                   "https://images.unsplash.com/photo-1521572267360-ee0c2909d518?fit=crop&w=200&h=200",
               }}
               style={styles.avatar}

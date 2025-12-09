@@ -19,7 +19,7 @@ import FoodCard from "../../components/FoodCard";
 import { useNavigation } from "@react-navigation/native";
 import { useAuth } from "../../context/AuthContext";
 import { useCart } from "../../context/CartContext";
-import { api } from "../../services/api";
+import { api, buildImageUrl } from "../../services/api";
 import {
   calculateDistance,
   formatDistance,
@@ -230,7 +230,8 @@ const HomeScreen = () => {
         ? calculateDeliveryTime(distance)
         : "Không xác định",
       deliveryFee: 20000, // Phí ship mặc định 20.000đ
-      image: item.imageUrl || "https://via.placeholder.com/300x200",
+      image:
+        buildImageUrl(item.imageUrl) || "https://via.placeholder.com/300x200",
       categories:
         item.categories?.map(
           (c: any) => c.name || c.category?.name || "Nhà hàng"
@@ -348,7 +349,8 @@ const HomeScreen = () => {
       id: item.id.toString(),
       name: item.name,
       price: item.price,
-      image: item.imageUrl || "https://via.placeholder.com/200x150",
+      image:
+        buildImageUrl(item.imageUrl) || "https://via.placeholder.com/200x150",
       restaurant: item.restaurant?.name || "Nhà hàng",
       rating: item.restaurant?.rating || 4.0,
     };

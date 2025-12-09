@@ -15,7 +15,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import Icon from "react-native-vector-icons/MaterialIcons";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import { theme } from "../../theme/theme";
-import { api } from "../../services/api";
+import { api, buildImageUrl } from "../../services/api";
 import { formatDateTime, formatPrice } from "../../utils/helpers";
 import { useAuth } from "../../context/AuthContext";
 import { useCart } from "../../context/CartContext";
@@ -200,7 +200,7 @@ const RestaurantDetailScreen = () => {
       <Image
         source={{
           uri:
-            product.imageUrl ||
+            buildImageUrl(product.imageUrl) ||
             "https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&fit=crop&w=400&q=60",
         }}
         style={styles.productImage}
@@ -260,7 +260,7 @@ const RestaurantDetailScreen = () => {
         <Text style={styles.feedbackContent}>{feedback.content}</Text>
         {feedback.imageUrl ? (
           <Image
-            source={{ uri: feedback.imageUrl }}
+            source={{ uri: buildImageUrl(feedback.imageUrl) || undefined }}
             style={styles.feedbackImage}
           />
         ) : null}
@@ -347,7 +347,7 @@ const RestaurantDetailScreen = () => {
       <ImageBackground
         source={{
           uri:
-            restaurant?.imageUrl ||
+            buildImageUrl(restaurant?.imageUrl) ||
             "https://images.unsplash.com/photo-1540189549336-e6e99c3679fe?auto=format&fit=crop&w=900&q=60",
         }}
         style={styles.cover}

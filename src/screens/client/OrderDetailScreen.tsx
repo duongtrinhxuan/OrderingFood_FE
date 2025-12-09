@@ -12,7 +12,7 @@ import {
 import { useNavigation, useRoute } from "@react-navigation/native";
 import Icon from "react-native-vector-icons/MaterialIcons";
 import { theme } from "../../theme/theme";
-import { api } from "../../services/api";
+import { api, buildImageUrl } from "../../services/api";
 import { formatDateTime, formatPrice } from "../../utils/helpers";
 import FeedbackModal, { OrderFeedback } from "../../components/FeedbackModal";
 import OrderJourneyModal from "../../components/OrderJourneyModal";
@@ -367,7 +367,9 @@ const OrderDetailScreen = () => {
               </Text>
               {existingFeedback.imageUrl ? (
                 <Image
-                  source={{ uri: existingFeedback.imageUrl }}
+                  source={{
+                    uri: buildImageUrl(existingFeedback.imageUrl) || undefined,
+                  }}
                   style={styles.feedbackImage}
                 />
               ) : null}
@@ -404,7 +406,7 @@ const OrderDetailScreen = () => {
                 <Image
                   source={{
                     uri:
-                      detail.product?.imageUrl ||
+                      buildImageUrl(detail.product?.imageUrl) ||
                       "https://via.placeholder.com/80x80",
                   }}
                   style={styles.productImage}
@@ -445,7 +447,7 @@ const OrderDetailScreen = () => {
             <Image
               source={{
                 uri:
-                  order.restaurant?.imageUrl ||
+                  buildImageUrl(order.restaurant?.imageUrl) ||
                   "https://via.placeholder.com/100x100",
               }}
               style={styles.restaurantImageLarge}

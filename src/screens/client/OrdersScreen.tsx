@@ -12,7 +12,7 @@ import {
 import Icon from "react-native-vector-icons/MaterialIcons";
 import { theme } from "../../theme/theme";
 import { useAuth } from "../../context/AuthContext";
-import { api } from "../../services/api";
+import { api, buildImageUrl } from "../../services/api";
 import { formatPrice, formatDateTime } from "../../utils/helpers";
 import { useNavigation } from "@react-navigation/native";
 import FeedbackModal, { OrderFeedback } from "../../components/FeedbackModal";
@@ -193,7 +193,7 @@ const OrdersScreen = () => {
             <Image
               source={{
                 uri:
-                  item.restaurant?.imageUrl ||
+                  buildImageUrl(item.restaurant?.imageUrl) ||
                   "https://via.placeholder.com/80x80",
               }}
               style={styles.restaurantImage}
