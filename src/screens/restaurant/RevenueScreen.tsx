@@ -13,7 +13,7 @@ import Icon from "react-native-vector-icons/MaterialIcons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRoute } from "@react-navigation/native";
 import { useAuth } from "../../context/AuthContext";
-import { api } from "../../services/api";
+import { api, buildImageUrl } from "../../services/api";
 import { theme } from "../../theme/theme";
 
 type PeriodKey = "today" | "week" | "month" | "year";
@@ -209,7 +209,7 @@ const RevenueScreen = () => {
           <Text style={styles.rankText}>#{index + 1}</Text>
         </View>
         <Image
-          source={{ uri: product.imageUrl || fallbackImage }}
+          source={{ uri: buildImageUrl(product.imageUrl) || fallbackImage }}
           style={styles.itemImage}
         />
         <View style={styles.itemInfo}>
