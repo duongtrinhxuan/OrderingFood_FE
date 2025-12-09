@@ -14,7 +14,7 @@ import {
 import Icon from "react-native-vector-icons/MaterialIcons";
 import * as ImagePicker from "expo-image-picker";
 import { theme } from "../theme/theme";
-import { api } from "../services/api";
+import { api, buildImageUrl } from "../services/api";
 
 export type OrderFeedbackResponse = {
   id: number;
@@ -232,7 +232,10 @@ const FeedbackModal: React.FC<FeedbackModalProps> = ({
             <Text style={styles.sectionTitle}>Hình ảnh minh họa</Text>
             {imageUrl ? (
               <View style={styles.imagePreviewWrapper}>
-                <Image source={{ uri: imageUrl }} style={styles.imagePreview} />
+                <Image
+                  source={{ uri: buildImageUrl(imageUrl) || imageUrl }}
+                  style={styles.imagePreview}
+                />
                 <TouchableOpacity
                   style={styles.removeImageBtn}
                   onPress={() => setImageUrl("")}
