@@ -68,8 +68,9 @@ const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin }) => {
       setLoading(true);
 
       if (isLogin) {
-        const user = await api.login({ email, password });
-        onLogin(buildAuthUser(user));
+        const response = await api.login({ email, password });
+        // response.user chứa thông tin user, response.accessToken đã được lưu tự động
+        onLogin(buildAuthUser(response.user));
         return;
       }
 

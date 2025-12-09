@@ -1,4 +1,5 @@
 import Constants from "expo-constants";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 type HttpMethod = "GET" | "POST" | "PATCH" | "DELETE";
 
@@ -43,16 +44,56 @@ export const buildImageUrl = (imageUrl?: string | null): string | undefined => {
 // Export API_BASE_URL để các file khác có thể sử dụng
 export { API_BASE_URL };
 
+// Token storage key
+const TOKEN_KEY = "@auth_token";
+
+// Token management functions
+export const tokenStorage = {
+  async getToken(): Promise<string | null> {
+    try {
+      return await AsyncStorage.getItem(TOKEN_KEY);
+    } catch (error) {
+      console.error("Error getting token:", error);
+      return null;
+    }
+  },
+  async setToken(token: string): Promise<void> {
+    try {
+      await AsyncStorage.setItem(TOKEN_KEY, token);
+    } catch (error) {
+      console.error("Error setting token:", error);
+    }
+  },
+  async removeToken(): Promise<void> {
+    try {
+      await AsyncStorage.removeItem(TOKEN_KEY);
+    } catch (error) {
+      console.error("Error removing token:", error);
+    }
+  },
+};
+
 async function request<T>(
   path: string,
   method: HttpMethod = "GET",
   body?: unknown
 ): Promise<T> {
+  // Lấy token từ storage
+  const token = await tokenStorage.getToken();
+
+  // Tạo headers
+  const headers: HeadersInit = {
+    "Content-Type": "application/json",
+  };
+
+  // Thêm Authorization header nếu có token
+  if (token) {
+    headers["Authorization"] = `Bearer ${token}`;
+  }
+
   const response = await fetch(`${API_BASE_URL}${path}`, {
     method,
-    headers: {
-      "Content-Type": "application/json",
-    },
+    headers,
     body: body ? JSON.stringify(body) : undefined,
   });
 
@@ -173,8 +214,17 @@ async function uploadFile(
 }
 
 export const api = {
-  login(payload: LoginPayload) {
-    return request("/auth/login", "POST", payload);
+  async login(payload: LoginPayload) {
+    const response = await request<{ accessToken: string; user: any }>(
+      "/auth/login",
+      "POST",
+      payload
+    );
+    // Lưu token sau khi login thành công
+    if (response.accessToken) {
+      await tokenStorage.setToken(response.accessToken);
+    }
+    return response;
   },
   getUserProfile(userId: number) {
     return request(`/auth/user/${userId}`, "GET");
