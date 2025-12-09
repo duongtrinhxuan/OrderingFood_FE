@@ -2,6 +2,7 @@ import React from "react";
 import { View, Text, StyleSheet, TouchableOpacity, Image } from "react-native";
 import Icon from "react-native-vector-icons/MaterialIcons";
 import { theme } from "../theme/theme";
+import { buildImageUrl } from "../services/api";
 
 interface FoodCardProps {
   food: {
@@ -32,6 +33,8 @@ const FoodCard: React.FC<FoodCardProps> = ({
     }).format(price);
   };
 
+  const imageUri = buildImageUrl((food as any).imageUrl || food.image);
+
   return (
     <TouchableOpacity
       style={[styles.container, vertical && styles.containerVertical]}
@@ -43,7 +46,14 @@ const FoodCard: React.FC<FoodCardProps> = ({
           vertical && styles.imageContainerVertical,
         ]}
       >
-        <Image source={{ uri: food.image }} style={styles.image} />
+        <Image
+          source={{
+            uri:
+              imageUri ||
+              "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?fit=crop&w=800&q=80",
+          }}
+          style={styles.image}
+        />
       </View>
 
       <View style={[styles.content, vertical && styles.contentVertical]}>

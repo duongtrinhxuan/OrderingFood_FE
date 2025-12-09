@@ -4,11 +4,11 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
-  Image,
   ImageBackground,
 } from "react-native";
 import Icon from "react-native-vector-icons/MaterialIcons";
 import { theme } from "../theme/theme";
+import { buildImageUrl } from "../services/api";
 
 interface RestaurantCardProps {
   restaurant: {
@@ -38,10 +38,18 @@ const RestaurantCard: React.FC<RestaurantCardProps> = ({
   const ratingValue =
     typeof restaurant.rating === "number" ? restaurant.rating : 0;
 
+  const imageUri = buildImageUrl(
+    (restaurant as any).imageUrl || restaurant.image
+  );
+
   return (
     <TouchableOpacity style={styles.container} onPress={onPress}>
       <ImageBackground
-        source={{ uri: restaurant.image }}
+        source={{
+          uri:
+            imageUri ||
+            "https://images.unsplash.com/photo-1555992336-03a23c7b20aa?fit=crop&w=800&q=80",
+        }}
         style={styles.image}
         imageStyle={styles.imageStyle}
       >
