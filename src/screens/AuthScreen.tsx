@@ -35,8 +35,8 @@ const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin }) => {
   );
   const [loading, setLoading] = useState(false);
 
-  const disabled = useMemo(
-    () =>
+  const disabled = useMemo(() => {
+    const result =
       loading ||
       !email ||
       !password ||
@@ -44,9 +44,22 @@ const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin }) => {
         (!fullName ||
           !phone ||
           !confirmPassword ||
-          password !== confirmPassword)),
-    [loading, email, password, isLogin, fullName, phone, confirmPassword]
-  );
+          password !== confirmPassword));
+    // Debug log để kiểm tra điều kiện disabled
+    if (!isLogin) {
+      console.log("[AuthScreen] Disabled check:", {
+        loading,
+        email: !!email,
+        password: !!password,
+        fullName: !!fullName,
+        phone: !!phone,
+        confirmPassword: !!confirmPassword,
+        passwordsMatch: password === confirmPassword,
+        result,
+      });
+    }
+    return result;
+  }, [loading, email, password, isLogin, fullName, phone, confirmPassword]);
 
   const buildAuthUser = (payload: any): AuthUser => ({
     id: payload.id,
@@ -100,6 +113,13 @@ const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin }) => {
       }
 
       const roleId = selectedRole === "client" ? 1 : 2;
+      console.log(
+        "[AuthScreen] Creating user with roleId:",
+        roleId,
+        "selectedRole:",
+        selectedRole
+      );
+
       const createdUser = await api.createUser({
         email,
         username: fullName,
@@ -110,7 +130,10 @@ const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin }) => {
         isActive: true,
       });
 
+      console.log("[AuthScreen] User created:", createdUser);
+
       if (roleId === 1) {
+        console.log("[AuthScreen] Creating cart for customer");
         await api.createCart({
           userId: createdUser.id,
           status: "ACTIVE",
@@ -118,7 +141,9 @@ const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin }) => {
         });
       }
 
-      onLogin(buildAuthUser(createdUser));
+      const authUser = buildAuthUser(createdUser);
+      console.log("[AuthScreen] Built auth user:", authUser);
+      onLogin(authUser);
     } catch (error: any) {
       Alert.alert(
         "Thao tác thất bại",
@@ -352,8 +377,16 @@ const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin }) => {
 
           <TouchableOpacity
             style={[styles.authButton, disabled && styles.disabledButton]}
-            onPress={handleAuth}
+            onPress={() => {
+              console.log("[AuthScreen] Button pressed, disabled:", disabled);
+              if (!disabled) {
+                handleAuth();
+              } else {
+                console.log("[AuthScreen] Button is disabled, cannot proceed");
+              }
+            }}
             disabled={disabled}
+            activeOpacity={disabled ? 1 : 0.7}
           >
             <LinearGradient
               colors={[theme.colors.primary, theme.colors.secondary]}
