@@ -132,16 +132,33 @@ const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin }) => {
 
       console.log("[AuthScreen] User created:", createdUser);
 
+      // Sau khi đăng ký, tự động đăng nhập để lấy token
+      console.log("[AuthScreen] Auto-login after registration");
+      const loginResponse = await api.login({ email, password });
+      console.log("[AuthScreen] Login response:", loginResponse);
+
+      // Đảm bảo token đã được lưu vào AsyncStorage
+      // api.login đã tự động lưu token, nhưng đợi một chút để chắc chắn
+      await new Promise((resolve) => setTimeout(resolve, 200));
+
+      // Chỉ tạo cart cho customer (roleId = 1) sau khi đã có token
       if (roleId === 1) {
         console.log("[AuthScreen] Creating cart for customer");
-        await api.createCart({
-          userId: createdUser.id,
-          status: "ACTIVE",
-          isActive: true,
-        });
+        try {
+          await api.createCart({
+            userId: createdUser.id,
+            status: "ACTIVE",
+            isActive: true,
+          });
+          console.log("[AuthScreen] Cart created successfully");
+        } catch (error) {
+          console.error("[AuthScreen] Error creating cart:", error);
+          // Không throw error, tiếp tục với đăng nhập
+          // Cart sẽ được tạo tự động khi user thêm món vào giỏ hàng qua getOrCreateUserCart
+        }
       }
 
-      const authUser = buildAuthUser(createdUser);
+      const authUser = buildAuthUser(loginResponse.user);
       console.log("[AuthScreen] Built auth user:", authUser);
       onLogin(authUser);
     } catch (error: any) {

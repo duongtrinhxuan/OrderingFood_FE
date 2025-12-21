@@ -116,7 +116,9 @@ const DiscountModal: React.FC<DiscountModalProps> = ({
     const discountDisplay =
       discountType === 1
         ? `${item.percent || 0}%`
-        : `${item.discountmoney?.toLocaleString("vi-VN") || 0} VND`;
+        : discountType === 2
+        ? `${item.discountmoney?.toLocaleString("vi-VN") || 0} VND`
+        : "Miễn phí vận chuyển";
 
     return (
       <TouchableOpacity

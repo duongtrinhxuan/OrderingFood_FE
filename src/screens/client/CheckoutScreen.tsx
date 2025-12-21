@@ -186,15 +186,15 @@ const CheckoutScreen = ({ navigation }: any) => {
     return cartItems.reduce((total, item) => total + item.unitPrice, 0);
   };
 
-  // Calculate discount amount
-  const calculateDiscountAmount = () => {
-    if (!selectedDiscount) return 0;
+  // Kiểm tra discount có hợp lệ không
+  const isDiscountValid = () => {
+    if (!selectedDiscount) return false;
 
     const subtotal = calculateSubtotal();
     const minOrderValue = selectedDiscount.minOrderValue || 0;
 
     // Kiểm tra minOrderValue
-    if (subtotal < minOrderValue) return 0;
+    if (subtotal < minOrderValue) return false;
 
     // Kiểm tra thời gian áp dụng
     const now = new Date();
@@ -205,10 +205,17 @@ const CheckoutScreen = ({ navigation }: any) => {
       ? new Date(selectedDiscount.endTime)
       : null;
 
-    if (startTime && now < startTime) return 0;
-    if (endTime && now > endTime) return 0;
+    if (startTime && now < startTime) return false;
+    if (endTime && now > endTime) return false;
 
-    // Tính discount dựa trên type
+    return true;
+  };
+
+  // Calculate discount amount
+  const calculateDiscountAmount = () => {
+    if (!selectedDiscount || !isDiscountValid()) return 0;
+
+    const subtotal = calculateSubtotal();
     const discountType = selectedDiscount.type || 1;
     let discountAmount = 0;
 
@@ -219,16 +226,36 @@ const CheckoutScreen = ({ navigation }: any) => {
     } else if (discountType === 2) {
       // Giảm theo số tiền cố định
       discountAmount = selectedDiscount.discountmoney || 0;
+    } else if (discountType === 3) {
+      // Free ship - không giảm tiền, chỉ free ship
+      discountAmount = 0;
     }
 
     return discountAmount;
+  };
+
+  // Calculate shipping fee
+  const calculateShippingFee = () => {
+    if (!selectedDiscount || !isDiscountValid()) {
+      return SHIPPING_FEE;
+    }
+
+    const discountType = selectedDiscount.type || 1;
+
+    // Type = 3: Free ship
+    if (discountType === 3) {
+      return 0;
+    }
+
+    return SHIPPING_FEE;
   };
 
   // Calculate total
   const calculateTotal = () => {
     const subtotal = calculateSubtotal();
     const discountAmount = calculateDiscountAmount();
-    return subtotal - discountAmount + SHIPPING_FEE;
+    const shippingFee = calculateShippingFee();
+    return subtotal - discountAmount + shippingFee;
   };
 
   // Get restaurant ID from cart items
@@ -264,6 +291,7 @@ const CheckoutScreen = ({ navigation }: any) => {
 
       const subtotal = calculateSubtotal();
       const discountAmount = calculateDiscountAmount();
+      const shippingFee = calculateShippingFee();
       // totalPrice = subtotal - discount (không bao gồm shippingFee vì có field riêng)
       const totalPrice = subtotal - discountAmount;
 
@@ -271,7 +299,7 @@ const CheckoutScreen = ({ navigation }: any) => {
       const order = await api.createOrder({
         totalPrice: totalPrice,
         status: ORDER_STATUS_PROCESSING,
-        shippingFee: SHIPPING_FEE,
+        shippingFee: shippingFee,
         note: orderNote || undefined,
         userId: user.id,
         restaurantId: restaurantId,
@@ -393,7 +421,13 @@ const CheckoutScreen = ({ navigation }: any) => {
           >
             <Text style={styles.selectButtonText}>
               {selectedDiscount
-                ? `${selectedDiscount.percent}% - ${selectedDiscount.description}`
+                ? selectedDiscount.type === 3
+                  ? `Miễn phí vận chuyển - ${selectedDiscount.description}`
+                  : selectedDiscount.type === 1
+                  ? `${selectedDiscount.percent}% - ${selectedDiscount.description}`
+                  : `${selectedDiscount.discountmoney?.toLocaleString(
+                      "vi-VN"
+                    )} VND - ${selectedDiscount.description}`
                 : "Chọn mã giảm giá"}
             </Text>
             <Icon
@@ -472,20 +506,26 @@ const CheckoutScreen = ({ navigation }: any) => {
                 {formatPrice(calculateSubtotal())}
               </Text>
             </View>
-            {selectedDiscount && calculateDiscountAmount() > 0 && (
+            {selectedDiscount && isDiscountValid() && (
               <View style={styles.summaryRow}>
                 <Text style={styles.summaryLabel}>
-                  Giảm giá ({selectedDiscount.percent}%)
+                  {selectedDiscount.type === 3
+                    ? "Miễn phí vận chuyển"
+                    : selectedDiscount.type === 1
+                    ? `Giảm giá (${selectedDiscount.percent}%)`
+                    : "Giảm giá"}
                 </Text>
                 <Text style={[styles.summaryValue, styles.discountValue]}>
-                  -{formatPrice(calculateDiscountAmount())}
+                  {selectedDiscount.type === 3
+                    ? "Miễn phí"
+                    : `-${formatPrice(calculateDiscountAmount())}`}
                 </Text>
               </View>
             )}
             <View style={styles.summaryRow}>
               <Text style={styles.summaryLabel}>Phí giao hàng</Text>
               <Text style={styles.summaryValue}>
-                {formatPrice(SHIPPING_FEE)}
+                {formatPrice(calculateShippingFee())}
               </Text>
             </View>
             <View style={[styles.summaryRow, styles.totalRow]}>

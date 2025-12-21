@@ -36,6 +36,15 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({
       return;
     }
 
+    // Chỉ refresh cart cho customer (roleId = 1)
+    const roleId =
+      typeof user.roleId === "string" ? parseInt(user.roleId, 10) : user.roleId;
+    if (roleId !== 1) {
+      setCartCount(0);
+      setCartId(null);
+      return;
+    }
+
     try {
       const cart = await api.getOrCreateUserCart(user.id);
       if (cart && (cart as any).items) {
@@ -54,7 +63,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({
       setCartCount(0);
       setCartId(null);
     }
-  }, [user?.id]);
+  }, [user?.id, user?.roleId]);
 
   useEffect(() => {
     refreshCartCount();

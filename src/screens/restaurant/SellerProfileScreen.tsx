@@ -116,6 +116,23 @@ const SellerProfileScreen: React.FC<Props> = ({ navigation }) => {
       if (!refreshing) {
         setLoading(true);
       }
+
+      // Đảm bảo token đã sẵn sàng trước khi gọi API
+      // Kiểm tra token có sẵn không, nếu không đợi một chút (trường hợp vừa đăng ký)
+      const { tokenStorage } = await import("../../services/api");
+      let token = await tokenStorage.getToken();
+      if (!token) {
+        console.warn("No token available, waiting...");
+        // Đợi một chút để token được lưu (nếu vừa đăng ký)
+        await new Promise((resolve) => setTimeout(resolve, 500));
+        token = await tokenStorage.getToken();
+        if (!token) {
+          console.error("Token still not available after wait");
+          // Không throw error, chỉ log để tránh crash
+          // Các API sẽ tự xử lý lỗi 401
+        }
+      }
+
       const [userDetail, ownedRestaurants] = (await Promise.all([
         api.getUserProfile(user.id),
         api.getRestaurantsByOwner(user.id),
@@ -137,9 +154,16 @@ const SellerProfileScreen: React.FC<Props> = ({ navigation }) => {
         phone: userDetail.phone,
         gender: userDetail.gender,
       });
-    } catch (error) {
+    } catch (error: any) {
       console.error("Load seller profile failed", error);
-      Alert.alert("Lỗi", "Không thể tải thông tin. Vui lòng thử lại.");
+      // Chỉ hiển thị alert nếu không phải lỗi 401 do token chưa sẵn sàng
+      const errorMessage = error?.message || "";
+      if (
+        !errorMessage.includes("Unauthorized") ||
+        errorMessage.includes("Chưa có token")
+      ) {
+        Alert.alert("Lỗi", "Không thể tải thông tin. Vui lòng thử lại.");
+      }
     } finally {
       setLoading(false);
       setRefreshing(false);
