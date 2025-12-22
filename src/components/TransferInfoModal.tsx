@@ -10,6 +10,7 @@ import {
   TouchableOpacity,
   View,
   Switch,
+  Image,
 } from "react-native";
 import Icon from "react-native-vector-icons/MaterialIcons";
 import { api, TransferInformationPayload } from "../services/api";
@@ -45,6 +46,55 @@ const PAYMENT_OPTIONS: { label: string; value: PaymentMethod }[] = [
   { label: "TKNH", value: "TKNH" },
   { label: "MOMO", value: "MOMO" },
   { label: "ZALOPAY", value: "ZALOPAY" },
+];
+
+// Danh sách các ngân hàng với logo
+const BANKS = [
+  {
+    code: "acb",
+    name: "ACB",
+    logo: require("../../assets/logonganhang/acb.png"),
+  },
+  {
+    code: "agribank",
+    name: "Agribank",
+    logo: require("../../assets/logonganhang/agribank.png"),
+  },
+  {
+    code: "bidv",
+    name: "BIDV",
+    logo: require("../../assets/logonganhang/bidv.png"),
+  },
+  {
+    code: "mbbank",
+    name: "MB Bank",
+    logo: require("../../assets/logonganhang/mbbank.png"),
+  },
+  {
+    code: "sacombank",
+    name: "Sacombank",
+    logo: require("../../assets/logonganhang/sacombank.png"),
+  },
+  {
+    code: "techcombank",
+    name: "Techcombank",
+    logo: require("../../assets/logonganhang/techcombank.png"),
+  },
+  {
+    code: "vietcombank",
+    name: "Vietcombank",
+    logo: require("../../assets/logonganhang/vietcombank.png"),
+  },
+  {
+    code: "vietinbank",
+    name: "Vietinbank",
+    logo: require("../../assets/logonganhang/vietinbank.png"),
+  },
+  {
+    code: "vpbank",
+    name: "VPBank",
+    logo: require("../../assets/logonganhang/vpbank.png"),
+  },
 ];
 
 const TransferInfoModal: React.FC<Props> = ({ visible, onClose, userId }) => {
@@ -286,14 +336,58 @@ const TransferInfoModal: React.FC<Props> = ({ visible, onClose, userId }) => {
       {showNameBank && (
         <>
           <Text style={styles.label}>Ngân hàng</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="VD: Vietcombank"
-            value={form.nameBank}
-            onChangeText={(text) =>
-              setForm((prev) => ({ ...prev, nameBank: text }))
-            }
-          />
+          {form.paymentMethod === "ZALOPAY" && form.isBank ? (
+            // Hiển thị danh sách chọn ngân hàng với logo cho Zalopay
+            <View style={styles.bankGrid}>
+              {BANKS.map((bank) => {
+                const isSelected =
+                  form.nameBank?.toLowerCase() === bank.name.toLowerCase() ||
+                  form.nameBank
+                    ?.toLowerCase()
+                    .includes(bank.code.toLowerCase());
+                return (
+                  <TouchableOpacity
+                    key={bank.code}
+                    style={[
+                      styles.bankCard,
+                      isSelected && styles.bankCardSelected,
+                    ]}
+                    onPress={() =>
+                      setForm((prev) => ({ ...prev, nameBank: bank.name }))
+                    }
+                  >
+                    <Image source={bank.logo} style={styles.bankLogo} />
+                    <Text
+                      style={[
+                        styles.bankName,
+                        isSelected && styles.bankNameSelected,
+                      ]}
+                    >
+                      {bank.name}
+                    </Text>
+                    {isSelected && (
+                      <Icon
+                        name="check-circle"
+                        size={20}
+                        color={theme.colors.primary}
+                        style={styles.checkIcon}
+                      />
+                    )}
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          ) : (
+            // Giữ nguyên TextInput cho TKNH
+            <TextInput
+              style={styles.input}
+              placeholder="VD: Vietcombank"
+              value={form.nameBank}
+              onChangeText={(text) =>
+                setForm((prev) => ({ ...prev, nameBank: text }))
+              }
+            />
+          )}
         </>
       )}
 
@@ -594,6 +688,49 @@ const styles = StyleSheet.create({
     borderRadius: theme.roundness,
     padding: theme.spacing.md,
     backgroundColor: theme.colors.background,
+  },
+  bankGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: theme.spacing.sm,
+    marginTop: theme.spacing.xs,
+  },
+  bankCard: {
+    width: "30%",
+    aspectRatio: 1,
+    backgroundColor: theme.colors.background,
+    borderRadius: theme.roundness,
+    borderWidth: 2,
+    borderColor: theme.colors.border,
+    alignItems: "center",
+    justifyContent: "center",
+    padding: theme.spacing.sm,
+    position: "relative",
+  },
+  bankCardSelected: {
+    borderColor: theme.colors.primary,
+    backgroundColor: theme.colors.lightOrange,
+  },
+  bankLogo: {
+    width: 50,
+    height: 50,
+    resizeMode: "contain",
+    marginBottom: theme.spacing.xs,
+  },
+  bankName: {
+    fontSize: 11,
+    fontWeight: "500",
+    color: theme.colors.text,
+    textAlign: "center",
+  },
+  bankNameSelected: {
+    color: theme.colors.primary,
+    fontWeight: "600",
+  },
+  checkIcon: {
+    position: "absolute",
+    top: 4,
+    right: 4,
   },
   saveButton: {
     backgroundColor: theme.colors.primary,
