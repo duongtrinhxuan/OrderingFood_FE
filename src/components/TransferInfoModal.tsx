@@ -65,7 +65,10 @@ const TransferInfoModal: React.FC<Props> = ({ visible, onClose, userId }) => {
     try {
       setLoading(true);
       const data = await api.getTransferInfosByUser(userId);
-      setItems((data as TransferInformation[]) || []);
+      const allItems = (data as TransferInformation[]) || [];
+      // Chỉ hiển thị những transfer-information có isActive = true trong giao diện seller
+      const activeItems = allItems.filter((item) => item.isActive !== false);
+      setItems(activeItems);
     } catch (error) {
       console.error("Load transfer infos failed", error);
       Alert.alert("Lỗi", "Không thể tải thông tin thanh toán.");

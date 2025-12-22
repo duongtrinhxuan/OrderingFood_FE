@@ -118,7 +118,12 @@ const OrderDetailScreen = () => {
       try {
         setLoadingTransferInfos(true);
         const data = await api.getTransferInfosByUser(ownerId);
-        setTransferInfos(Array.isArray(data) ? data : []);
+        const allTransferInfos = Array.isArray(data) ? data : [];
+        // Chỉ hiển thị những transfer-information có isActive = true của seller trong giao diện customer
+        const activeTransferInfos = allTransferInfos.filter(
+          (item: any) => item.isActive !== false
+        );
+        setTransferInfos(activeTransferInfos);
       } catch (error) {
         console.error("Error loading transfer informations:", error);
       } finally {
@@ -269,36 +274,124 @@ const OrderDetailScreen = () => {
   );
 
   const renderTransferCard = (info: any, idx: number) => {
-    // Ưu tiên format QR Zalopay chính thức theo số điện thoại ví
-    const zalopayPhone =
-      info.paymentMethod?.toUpperCase() === "ZALOPAY" && info.isBank === false
-        ? info.accountNumber
-        : undefined;
-    // Nếu isBank=true: sinh VietQR (bank transfer) để Zalopay quét được
+    // Tính toán các giá trị cần thiết
     const zalopayAmount = Math.max(0, Math.round(total || 0));
     const note = `Thanh toan don hang ${order.id}`;
-    const bankCode = (info.nameBank || "").trim().toLowerCase().includes("acb")
-      ? "acb"
-      : undefined;
+    const isZalopay = info.paymentMethod?.toUpperCase() === "ZALOPAY";
 
-    const qrUrl =
-      info.isBank === true && bankCode && info.accountNumber
-        ? `https://img.vietqr.io/image/${bankCode}-${encodeURIComponent(
+    // Xác định loại QR code cần tạo
+    let qrData: string;
+    let qrUrl: string;
+
+    if (isZalopay) {
+      if (info.isBank === false && info.accountNumber) {
+        // Trường hợp 1: Zalopay với số điện thoại ví - dùng format chuẩn zalopay://quickpay
+        qrData = `zalopay://quickpay?phone=${encodeURIComponent(
+          info.accountNumber
+        )}&amount=${encodeURIComponent(
+          zalopayAmount
+        )}&note=${encodeURIComponent(note)}`;
+        qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(
+          qrData
+        )}`;
+      } else if (info.isBank === true && info.accountNumber && info.nameBank) {
+        // Trường hợp 2: Zalopay với chuyển khoản ngân hàng - dùng VietQR chuẩn
+        // Map tên ngân hàng sang bankCode của VietQR
+        const bankName = (info.nameBank || "").trim().toLowerCase();
+        let bankCode: string | undefined;
+
+        // Danh sách các ngân hàng được hỗ trợ bởi VietQR
+        if (bankName.includes("acb")) bankCode = "acb";
+        else if (bankName.includes("vietcombank") || bankName.includes("vcb"))
+          bankCode = "vcb";
+        else if (bankName.includes("techcombank") || bankName.includes("tcb"))
+          bankCode = "tcb";
+        else if (bankName.includes("vietinbank") || bankName.includes("vib"))
+          bankCode = "vib";
+        else if (bankName.includes("bidv")) bankCode = "bidv";
+        else if (bankName.includes("agribank") || bankName.includes("agb"))
+          bankCode = "agb";
+        else if (bankName.includes("sacombank") || bankName.includes("stb"))
+          bankCode = "stb";
+        else if (bankName.includes("mbbank") || bankName.includes("mb"))
+          bankCode = "mb";
+        else if (bankName.includes("vpbank")) bankCode = "vpbank";
+        else if (bankName.includes("tpbank") || bankName.includes("tpbank"))
+          bankCode = "tpbank";
+        else if (bankName.includes("shb")) bankCode = "shb";
+        else if (bankName.includes("eximbank")) bankCode = "eximbank";
+        else if (bankName.includes("msb")) bankCode = "msb";
+        else if (bankName.includes("hdbank")) bankCode = "hdbank";
+        else if (bankName.includes("vietabank") || bankName.includes("vab"))
+          bankCode = "vab";
+        else if (bankName.includes("seabank")) bankCode = "seabank";
+        else if (bankName.includes("pvbank")) bankCode = "pvbank";
+        else if (bankName.includes("ocb")) bankCode = "ocb";
+        else if (bankName.includes("namabank")) bankCode = "namabank";
+        else if (bankName.includes("publicbank")) bankCode = "publicbank";
+        else if (bankName.includes("vietbank")) bankCode = "vietbank";
+        else if (bankName.includes("baoviet")) bankCode = "baoviet";
+        else if (bankName.includes("abbank")) bankCode = "abbank";
+        else if (
+          bankName.includes("vietcapitalbank") ||
+          bankName.includes("vccb")
+        )
+          bankCode = "vccb";
+        else if (bankName.includes("scb")) bankCode = "scb";
+        else if (bankName.includes("vrb")) bankCode = "vrb";
+        else if (bankName.includes("donga")) bankCode = "donga";
+        else if (bankName.includes("bacabank")) bankCode = "bacabank";
+        else if (bankName.includes("kienlongbank") || bankName.includes("klb"))
+          bankCode = "klb";
+        else if (
+          bankName.includes("lienvietpostbank") ||
+          bankName.includes("lpb")
+        )
+          bankCode = "lpb";
+        else if (bankName.includes("gpbank")) bankCode = "gpbank";
+        else if (bankName.includes("vietabank") || bankName.includes("vab"))
+          bankCode = "vab";
+        else if (bankName.includes("sgb")) bankCode = "sgb";
+        else if (bankName.includes("ncb")) bankCode = "ncb";
+        else if (bankName.includes("oceanbank")) bankCode = "oceanbank";
+        else if (bankName.includes("pbank")) bankCode = "pbank";
+        else if (bankName.includes("pvcombank")) bankCode = "pvcombank";
+        else if (bankName.includes("vietbank")) bankCode = "vietbank";
+        else if (bankName.includes("vietabank") || bankName.includes("vab"))
+          bankCode = "vab";
+
+        if (bankCode) {
+          // Sử dụng VietQR với format chuẩn (có logo) để đảm bảo quét được
+          qrUrl = `https://img.vietqr.io/image/${bankCode}-${encodeURIComponent(
             info.accountNumber
-          )}-qr_only.png?amount=${zalopayAmount}&addInfo=${encodeURIComponent(
+          )}-compact2.png?amount=${zalopayAmount}&addInfo=${encodeURIComponent(
             note
-          )}`
-        : `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(
-            zalopayPhone
-              ? `zalopay://quickpay?phone=${encodeURIComponent(
-                  zalopayPhone
-                )}&amount=${encodeURIComponent(
-                  zalopayAmount
-                )}&note=${encodeURIComponent(note)}`
-              : `ZALOPAY|${info.accountNumber || ""}|${
-                  info.nameBank || ""
-                }|${zalopayAmount}|order:${order.id}`
           )}`;
+        } else {
+          // Nếu không tìm thấy bankCode, dùng format Zalopay chuẩn
+          qrData = `ZALOPAY|${info.accountNumber}|${info.nameBank}|${zalopayAmount}|order:${order.id}`;
+          qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(
+            qrData
+          )}`;
+        }
+      } else {
+        // Trường hợp 3: Zalopay nhưng thiếu thông tin - dùng format mặc định
+        qrData = `ZALOPAY|${info.accountNumber || ""}|${
+          info.nameBank || ""
+        }|${zalopayAmount}|order:${order.id}`;
+        qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(
+          qrData
+        )}`;
+      }
+    } else {
+      // Không phải Zalopay - giữ nguyên logic cũ hoặc xử lý tương tự
+      qrData = `${info.paymentMethod || ""}|${info.accountNumber || ""}|${
+        info.nameBank || ""
+      }|${zalopayAmount}|order:${order.id}`;
+      qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(
+        qrData
+      )}`;
+    }
     return (
       <View key={`${info.id || idx}`} style={styles.transferCard}>
         <View style={styles.transferRow}>
