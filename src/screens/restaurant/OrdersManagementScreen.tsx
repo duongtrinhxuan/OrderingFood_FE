@@ -586,7 +586,7 @@ const OrdersManagementScreen: React.FC<
                 <Image
                   source={{
                     uri:
-                      selectedOrder.user?.avatar ||
+                      buildImageUrl(selectedOrder.user?.avatar) ||
                       "https://images.unsplash.com/photo-1521572267360-ee0c2909d518?fit=crop&w=200&h=200",
                   }}
                   style={styles.detailAvatar}
