@@ -841,7 +841,7 @@ const OrdersManagementScreen: React.FC<
                     { color: theme.colors.surface },
                   ]}
                 >
-                  Xác nhận đã thanh toán
+                  Xác nhận
                 </Text>
               </TouchableOpacity>
             </View>
