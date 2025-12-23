@@ -60,6 +60,9 @@ const OrderJourneyModal: React.FC<OrderJourneyModalProps> = ({
     latitude: number;
     longitude: number;
   } | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<any[]>([]);
+  const [searching, setSearching] = useState(false);
   const [addressInfo, setAddressInfo] = useState<{
     province: string;
     district: string;
@@ -242,6 +245,58 @@ const OrderJourneyModal: React.FC<OrderJourneyModalProps> = ({
     loadAddressFromCoordinates(latitude, longitude);
   };
 
+  const searchPlaces = useCallback(async (query: string) => {
+    if (!query || query.trim().length < 3) {
+      console.log("[OrderJourney] Skip search, query too short:", query);
+      setSearchResults([]);
+      return;
+    }
+    try {
+      setSearching(true);
+      const resp = await fetch(
+        `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(
+          query.trim()
+        )}&limit=5&addressdetails=1`,
+        {
+          headers: {
+            // Nominatim yêu cầu User-Agent để tránh chặn
+            "User-Agent": "OrderingFoodApp/1.0 (journey search)",
+          },
+        }
+      );
+      console.log("[OrderJourney] searchPlaces status:", resp.status);
+      const data = await resp.json();
+      console.log(
+        "[OrderJourney] searchPlaces results:",
+        Array.isArray(data) ? data.length : "not-array"
+      );
+      setSearchResults(Array.isArray(data) ? data : []);
+    } catch (error) {
+      console.log("[OrderJourney] searchPlaces error:", error);
+    } finally {
+      setSearching(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    const t = setTimeout(() => {
+      searchPlaces(searchQuery);
+    }, 350);
+    return () => clearTimeout(t);
+  }, [searchQuery, searchPlaces]);
+
+  const handleSelectSuggestion = (item: any) => {
+    const lat = parseFloat(item.lat);
+    const lon = parseFloat(item.lon);
+    if (isNaN(lat) || isNaN(lon)) return;
+    setSelectedLocation({ latitude: lat, longitude: lon });
+    setLatitudeText(lat.toFixed(6));
+    setLongitudeText(lon.toFixed(6));
+    setSearchQuery(item.display_name || "");
+    setSearchResults([]);
+    loadAddressFromCoordinates(lat, lon);
+  };
+
   const loadAddressFromCoordinates = async (lat: number, lng: number) => {
     try {
       setLoadingAddress(true);
@@ -294,7 +349,14 @@ const OrderJourneyModal: React.FC<OrderJourneyModalProps> = ({
     setTimelineDate(null);
     setLatitudeText("");
     setLongitudeText("");
-    setSelectedLocation(null);
+    setSearchQuery("");
+    setSearchResults([]);
+    setSelectedLocation({
+      latitude: 10.762622,
+      longitude: 106.660172,
+    });
+    setLatitudeText("10.762622");
+    setLongitudeText("106.660172");
     setAddressInfo(null);
     setMapPickerVisible(true);
   };
@@ -667,10 +729,70 @@ const OrderJourneyModal: React.FC<OrderJourneyModalProps> = ({
               <Text style={styles.mapPickerTitle}>
                 {isCreating ? "Thêm điểm hành trình" : "Chỉnh sửa hành trình"}
               </Text>
-              <View style={{ width: 24 }} />
+              <TouchableOpacity
+                onPress={() => setIsFormCollapsed((prev) => !prev)}
+                style={styles.collapseButton}
+              >
+                <Icon
+                  name={isFormCollapsed ? "unfold-more" : "unfold-less"}
+                  size={22}
+                  color={theme.colors.text}
+                />
+              </TouchableOpacity>
             </View>
 
-            <View style={styles.mapPickerMapContainer}>
+            <View style={styles.searchBar}>
+              <Icon name="search" size={20} color={theme.colors.mediumGray} />
+              <TextInput
+                style={styles.searchInput}
+                placeholder="Tìm địa điểm (gần giống Google Maps)"
+                value={searchQuery}
+                onChangeText={setSearchQuery}
+                placeholderTextColor={theme.colors.placeholder}
+                returnKeyType="search"
+                onSubmitEditing={() => searchPlaces(searchQuery)}
+              />
+              {searchQuery.length > 0 && (
+                <TouchableOpacity onPress={() => setSearchQuery("")}>
+                  <Icon
+                    name="clear"
+                    size={20}
+                    color={theme.colors.mediumGray}
+                  />
+                </TouchableOpacity>
+              )}
+            </View>
+            {searchResults.length > 0 && (
+              <View style={styles.suggestionContainer}>
+                <FlatList
+                  data={searchResults}
+                  keyExtractor={(item, idx) => `${item.place_id || idx}`}
+                  renderItem={({ item }) => (
+                    <TouchableOpacity
+                      style={styles.suggestionItem}
+                      onPress={() => handleSelectSuggestion(item)}
+                    >
+                      <Icon
+                        name="place"
+                        size={18}
+                        color={theme.colors.primary}
+                        style={{ marginRight: theme.spacing.xs }}
+                      />
+                      <Text style={styles.suggestionText}>
+                        {item.display_name || "Kết quả"}
+                      </Text>
+                    </TouchableOpacity>
+                  )}
+                />
+              </View>
+            )}
+
+            <View
+              style={[
+                styles.mapPickerMapContainer,
+                isFormCollapsed && styles.mapPickerMapExpanded,
+              ]}
+            >
               <MapView
                 provider={PROVIDER_GOOGLE}
                 style={styles.mapPickerMap}
@@ -707,105 +829,107 @@ const OrderJourneyModal: React.FC<OrderJourneyModalProps> = ({
               </MapView>
             </View>
 
-            <View style={styles.formContainer}>
-              <View style={styles.inputGroup}>
-                <Text style={styles.label}>Vĩ độ (Latitude) *</Text>
-                <TextInput
-                  style={styles.input}
-                  value={latitudeText}
-                  onChangeText={handleLatitudeChange}
-                  placeholder="VD: 10.762622"
-                  keyboardType="decimal-pad"
-                />
-              </View>
-
-              <View style={styles.inputGroup}>
-                <Text style={styles.label}>Kinh độ (Longitude) *</Text>
-                <TextInput
-                  style={styles.input}
-                  value={longitudeText}
-                  onChangeText={handleLongitudeChange}
-                  placeholder="VD: 106.660172"
-                  keyboardType="decimal-pad"
-                />
-              </View>
-
-              {loadingAddress ? (
-                <View style={styles.addressLoadingContainer}>
-                  <ActivityIndicator
-                    size="small"
-                    color={theme.colors.primary}
+            {!isFormCollapsed && (
+              <View style={styles.formContainer}>
+                <View style={styles.inputGroup}>
+                  <Text style={styles.label}>Vĩ độ (Latitude) *</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={latitudeText}
+                    onChangeText={handleLatitudeChange}
+                    placeholder="VD: 10.762622"
+                    keyboardType="decimal-pad"
                   />
-                  <Text style={styles.addressLoadingText}>
-                    Đang tải thông tin địa chỉ...
-                  </Text>
                 </View>
-              ) : addressInfo ? (
-                <View style={styles.addressInfoContainer}>
-                  <Text style={styles.addressInfoLabel}>
-                    Thông tin địa chỉ:
-                  </Text>
-                  <Text style={styles.addressInfoText}>
-                    {[
-                      addressInfo.street,
-                      addressInfo.ward,
-                      addressInfo.district,
-                      addressInfo.province,
-                    ]
-                      .filter(Boolean)
-                      .join(", ")}
-                  </Text>
+
+                <View style={styles.inputGroup}>
+                  <Text style={styles.label}>Kinh độ (Longitude) *</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={longitudeText}
+                    onChangeText={handleLongitudeChange}
+                    placeholder="VD: 106.660172"
+                    keyboardType="decimal-pad"
+                  />
                 </View>
-              ) : null}
 
-              <View style={styles.inputGroup}>
-                <Text style={styles.label}>Nội dung (tùy chọn)</Text>
-                <TextInput
-                  style={styles.input}
-                  value={content}
-                  onChangeText={setContent}
-                  placeholder="Nhập nội dung mô tả điểm hành trình"
-                  multiline
-                  numberOfLines={3}
-                />
-              </View>
+                {loadingAddress ? (
+                  <View style={styles.addressLoadingContainer}>
+                    <ActivityIndicator
+                      size="small"
+                      color={theme.colors.primary}
+                    />
+                    <Text style={styles.addressLoadingText}>
+                      Đang tải thông tin địa chỉ...
+                    </Text>
+                  </View>
+                ) : addressInfo ? (
+                  <View style={styles.addressInfoContainer}>
+                    <Text style={styles.addressInfoLabel}>
+                      Thông tin địa chỉ:
+                    </Text>
+                    <Text style={styles.addressInfoText}>
+                      {[
+                        addressInfo.street,
+                        addressInfo.ward,
+                        addressInfo.district,
+                        addressInfo.province,
+                      ]
+                        .filter(Boolean)
+                        .join(", ")}
+                    </Text>
+                  </View>
+                ) : null}
 
-              <View style={styles.inputGroup}>
-                <Text style={styles.label}>Thời gian (tùy chọn)</Text>
-                <TouchableOpacity
-                  style={styles.timelineInput}
-                  onPress={handleOpenDateTimePicker}
-                >
-                  <Text
-                    style={[
-                      styles.timelineInputText,
-                      !timeline && styles.timelineInputPlaceholder,
-                    ]}
+                <View style={styles.inputGroup}>
+                  <Text style={styles.label}>Nội dung (tùy chọn)</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={content}
+                    onChangeText={setContent}
+                    placeholder="Nhập nội dung mô tả điểm hành trình"
+                    multiline
+                    numberOfLines={3}
+                  />
+                </View>
+
+                <View style={styles.inputGroup}>
+                  <Text style={styles.label}>Thời gian (tùy chọn)</Text>
+                  <TouchableOpacity
+                    style={styles.timelineInput}
+                    onPress={handleOpenDateTimePicker}
                   >
-                    {timeline || "Chọn ngày và giờ"}
+                    <Text
+                      style={[
+                        styles.timelineInputText,
+                        !timeline && styles.timelineInputPlaceholder,
+                      ]}
+                    >
+                      {timeline || "Chọn ngày và giờ"}
+                    </Text>
+                    <Icon
+                      name="access-time"
+                      size={20}
+                      color={theme.colors.primary}
+                    />
+                  </TouchableOpacity>
+                </View>
+
+                <TouchableOpacity
+                  style={[
+                    styles.saveButton,
+                    (!latitudeText || !longitudeText) &&
+                      styles.saveButtonDisabled,
+                  ]}
+                  onPress={handleSaveJourney}
+                  disabled={!latitudeText || !longitudeText}
+                >
+                  <Text style={styles.saveButtonText}>
+                    {isCreating ? "Thêm điểm" : "Cập nhật"}
                   </Text>
-                  <Icon
-                    name="access-time"
-                    size={20}
-                    color={theme.colors.primary}
-                  />
                 </TouchableOpacity>
               </View>
-
-              <TouchableOpacity
-                style={[
-                  styles.saveButton,
-                  (!latitudeText || !longitudeText) &&
-                    styles.saveButtonDisabled,
-                ]}
-                onPress={handleSaveJourney}
-                disabled={!latitudeText || !longitudeText}
-              >
-                <Text style={styles.saveButtonText}>
-                  {isCreating ? "Thêm điểm" : "Cập nhật"}
-                </Text>
-              </TouchableOpacity>
-            </View>
+            )}
           </View>
         </Modal>
       )}
@@ -1176,8 +1300,55 @@ const styles = StyleSheet.create({
     flex: 1,
     height: 400,
   },
+  mapPickerMapExpanded: {
+    height: undefined,
+  },
   mapPickerMap: {
     flex: 1,
+  },
+  searchBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: theme.colors.background,
+    marginHorizontal: theme.spacing.lg,
+    marginTop: theme.spacing.sm,
+    marginBottom: theme.spacing.sm,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.sm,
+    borderRadius: theme.roundness,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+  },
+  searchInput: {
+    flex: 1,
+    marginHorizontal: theme.spacing.sm,
+    color: theme.colors.text,
+  },
+  suggestionContainer: {
+    marginHorizontal: theme.spacing.lg,
+    maxHeight: 220,
+    backgroundColor: theme.colors.surface,
+    borderRadius: theme.roundness,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    marginBottom: theme.spacing.sm,
+    overflow: "hidden",
+  },
+  suggestionItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: theme.colors.border,
+  },
+  suggestionText: {
+    flex: 1,
+    color: theme.colors.text,
+    fontSize: 14,
+  },
+  collapseButton: {
+    padding: theme.spacing.xs,
   },
   addressLoadingContainer: {
     flexDirection: "row",

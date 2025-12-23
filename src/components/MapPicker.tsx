@@ -9,6 +9,8 @@ import {
   Alert,
   Linking,
   Platform,
+  TextInput,
+  FlatList,
 } from "react-native";
 import MapView, { Marker, PROVIDER_GOOGLE } from "react-native-maps";
 import Icon from "react-native-vector-icons/MaterialIcons";
@@ -47,6 +49,9 @@ const MapPicker: React.FC<MapPickerProps> = ({
     latitude: number;
     longitude: number;
   } | null>(initialLocation || null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<any[]>([]);
+  const [searching, setSearching] = useState(false);
 
   useEffect(() => {
     if (visible) {
@@ -102,6 +107,62 @@ const MapPicker: React.FC<MapPickerProps> = ({
   const handleMapPress = (event: any) => {
     const { latitude, longitude } = event.nativeEvent.coordinate;
     setSelectedLocation({ latitude, longitude });
+  };
+
+  const searchPlaces = useCallback(async (query: string) => {
+    if (!query || query.trim().length < 3) {
+      console.log("[MapPicker] Skip search, query too short:", query);
+      setSearchResults([]);
+      return;
+    }
+    try {
+      setSearching(true);
+      const resp = await fetch(
+        `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(
+          query.trim()
+        )}&limit=5&addressdetails=1`,
+        {
+          headers: {
+            // Nominatim yêu cầu User-Agent để tránh chặn
+            "User-Agent": "OrderingFoodApp/1.0 (map search)",
+          },
+        }
+      );
+      console.log("[MapPicker] searchPlaces status:", resp.status);
+      const data = await resp.json();
+      console.log(
+        "[MapPicker] searchPlaces results:",
+        Array.isArray(data) ? data.length : "not-array"
+      );
+      setSearchResults(Array.isArray(data) ? data : []);
+    } catch (error) {
+      console.log("[MapPicker] searchPlaces error:", error);
+    } finally {
+      setSearching(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      searchPlaces(searchQuery);
+    }, 350);
+    return () => clearTimeout(timer);
+  }, [searchQuery, searchPlaces]);
+
+  const handleSelectSuggestion = (item: any) => {
+    const lat = parseFloat(item.lat);
+    const lon = parseFloat(item.lon);
+    if (isNaN(lat) || isNaN(lon)) return;
+    const regionUpdate = {
+      latitude: lat,
+      longitude: lon,
+      latitudeDelta: 0.01,
+      longitudeDelta: 0.01,
+    };
+    setRegion(regionUpdate);
+    setSelectedLocation({ latitude: lat, longitude: lon });
+    setSearchResults([]);
+    setSearchQuery(item.display_name || "");
   };
 
   const handleConfirm = async () => {
@@ -199,6 +260,48 @@ const MapPicker: React.FC<MapPickerProps> = ({
           </TouchableOpacity>
         </View>
 
+        <View style={styles.searchBar}>
+          <Icon name="search" size={20} color={theme.colors.mediumGray} />
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Tìm địa điểm (gần giống Google Maps)"
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            placeholderTextColor={theme.colors.placeholder}
+            returnKeyType="search"
+            onSubmitEditing={() => searchPlaces(searchQuery)}
+          />
+          {searchQuery.length > 0 && (
+            <TouchableOpacity onPress={() => setSearchQuery("")}>
+              <Icon name="clear" size={20} color={theme.colors.mediumGray} />
+            </TouchableOpacity>
+          )}
+        </View>
+        {searchResults.length > 0 && (
+          <View style={styles.suggestionContainer}>
+            <FlatList
+              data={searchResults}
+              keyExtractor={(item, idx) => `${item.place_id || idx}`}
+              renderItem={({ item }) => (
+                <TouchableOpacity
+                  style={styles.suggestionItem}
+                  onPress={() => handleSelectSuggestion(item)}
+                >
+                  <Icon
+                    name="place"
+                    size={18}
+                    color={theme.colors.primary}
+                    style={{ marginRight: theme.spacing.xs }}
+                  />
+                  <Text style={styles.suggestionText}>
+                    {item.display_name || "Kết quả"}
+                  </Text>
+                </TouchableOpacity>
+              )}
+            />
+          </View>
+        )}
+
         <MapView
           provider={PROVIDER_GOOGLE}
           style={styles.map}
@@ -291,6 +394,47 @@ const styles = StyleSheet.create({
   },
   locationButton: {
     padding: theme.spacing.xs,
+  },
+  searchBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: theme.colors.background,
+    marginHorizontal: theme.spacing.lg,
+    marginTop: theme.spacing.sm,
+    marginBottom: theme.spacing.sm,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.sm,
+    borderRadius: theme.roundness,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+  },
+  searchInput: {
+    flex: 1,
+    marginHorizontal: theme.spacing.sm,
+    color: theme.colors.text,
+  },
+  suggestionContainer: {
+    marginHorizontal: theme.spacing.lg,
+    maxHeight: 220,
+    backgroundColor: theme.colors.surface,
+    borderRadius: theme.roundness,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    marginBottom: theme.spacing.sm,
+    overflow: "hidden",
+  },
+  suggestionItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: theme.colors.border,
+  },
+  suggestionText: {
+    flex: 1,
+    color: theme.colors.text,
+    fontSize: 14,
   },
   map: {
     flex: 1,
