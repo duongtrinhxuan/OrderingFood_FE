@@ -79,8 +79,16 @@ const EditOrderModal: React.FC<EditOrderModalProps> = ({
   const [selectedDiscountId, setSelectedDiscountId] = useState<number | null>(
     order.discountId || null
   );
+  const normalizePaymentMethod = (method?: string) => {
+    if (!method) return "COD";
+    const upper = method.toUpperCase();
+    if (upper === "BANK_TRANSFER") return "TKNH";
+    if (["COD", "TKNH", "MOMO", "ZALOPAY"].includes(upper)) return upper;
+    return "COD";
+  };
+
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<string>(
-    order.payments?.[0]?.paymentMethod || "COD"
+    normalizePaymentMethod(order.payments?.[0]?.paymentMethod)
   );
   const [orderDetails, setOrderDetails] = useState<OrderDetail[]>(
     order.orderDetails || []
@@ -126,7 +134,9 @@ const EditOrderModal: React.FC<EditOrderModalProps> = ({
       setNote(order.note || "");
       setSelectedAddressId(order.addressId || null);
       setSelectedDiscountId(order.discountId || null);
-      setSelectedPaymentMethod(order.payments?.[0]?.paymentMethod || "COD");
+      setSelectedPaymentMethod(
+        normalizePaymentMethod(order.payments?.[0]?.paymentMethod)
+      );
       setOrderDetails(order.orderDetails || []);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -355,7 +365,7 @@ const EditOrderModal: React.FC<EditOrderModalProps> = ({
             <View style={styles.section}>
               <Text style={styles.label}>Phương thức thanh toán</Text>
               <View style={styles.paymentRow}>
-                {["COD", "BANK_TRANSFER", "MOMO", "ZALOPAY"].map((method) => (
+                {["COD", "TKNH", "MOMO", "ZALOPAY"].map((method) => (
                   <TouchableOpacity
                     key={method}
                     style={[
@@ -374,7 +384,7 @@ const EditOrderModal: React.FC<EditOrderModalProps> = ({
                     >
                       {method === "COD"
                         ? "Tiền mặt"
-                        : method === "BANK_TRANSFER"
+                        : method === "TKNH"
                         ? "Chuyển khoản"
                         : method === "MOMO"
                         ? "MoMo"

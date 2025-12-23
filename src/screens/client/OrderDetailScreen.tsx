@@ -89,6 +89,7 @@ const OrderDetailScreen = () => {
   const [addPaymentModalVisible, setAddPaymentModalVisible] = useState(false);
   const [transferInfos, setTransferInfos] = useState<any[]>([]);
   const [loadingTransferInfos, setLoadingTransferInfos] = useState(false);
+  const [isPaymentExpanded, setIsPaymentExpanded] = useState(true);
 
   const loadOrder = useCallback(async () => {
     try {
@@ -167,9 +168,16 @@ const OrderDetailScreen = () => {
     }, null as any);
   };
 
+  const normalizePaymentMethod = (method?: string) => {
+    if (!method) return "Không có thông tin";
+    const upper = method.toUpperCase();
+    if (upper === "BANK_TRANSFER") return "TKNH";
+    return upper;
+  };
+
   const getPaymentMethod = () => {
     const latestPayment = getLatestPayment();
-    return latestPayment?.paymentMethod || "Không có thông tin";
+    return normalizePaymentMethod(latestPayment?.paymentMethod);
   };
 
   const getPaymentStatusText = () => {
@@ -680,75 +688,97 @@ const OrderDetailScreen = () => {
 
         {/* Payment Method */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Phương thức thanh toán</Text>
-          <View style={styles.infoCard}>
-            <View style={styles.paymentMethodRow}>
-              <Icon name="payment" size={18} color={theme.colors.primary} />
-              <Text style={styles.infoValue}>{getPaymentMethod()}</Text>
-            </View>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Phương thức thanh toán</Text>
+            <TouchableOpacity
+              style={styles.toggleButton}
+              onPress={() => setIsPaymentExpanded((prev) => !prev)}
+              activeOpacity={0.7}
+            >
+              <Icon
+                name={
+                  isPaymentExpanded
+                    ? "keyboard-arrow-up"
+                    : "keyboard-arrow-down"
+                }
+                size={24}
+                color={theme.colors.primary}
+              />
+            </TouchableOpacity>
           </View>
-          {paymentStatusText && (
+
+          {isPaymentExpanded && (
             <>
-              <View style={[styles.infoCard, styles.paymentStatusCard]}>
-                <View style={styles.paymentStatusRow}>
-                  <Icon
-                    name={
-                      paymentStatusText === "Đã thanh toán"
-                        ? "check-circle"
-                        : "payment"
-                    }
-                    size={18}
-                    color={
-                      paymentStatusText === "Đã thanh toán"
-                        ? theme.colors.success
-                        : theme.colors.warning
-                    }
-                  />
-                  <Text
-                    style={[
-                      styles.paymentStatusText,
-                      paymentStatusText === "Đã thanh toán"
-                        ? { color: theme.colors.success }
-                        : { color: theme.colors.warning },
-                    ]}
-                  >
-                    Trạng thái thanh toán: {paymentStatusText}
-                  </Text>
+              <View style={styles.infoCard}>
+                <View style={styles.paymentMethodRow}>
+                  <Icon name="payment" size={18} color={theme.colors.primary} />
+                  <Text style={styles.infoValue}>{getPaymentMethod()}</Text>
                 </View>
               </View>
-              {order.status === 4 &&
-                paymentStatusText === "Chưa thanh toán" && (
-                  <TouchableOpacity
-                    style={styles.addPaymentButton}
-                    onPress={() => setAddPaymentModalVisible(true)}
-                  >
-                    <Icon
-                      name="add-circle"
-                      size={18}
-                      color={theme.colors.primary}
-                    />
-                    <Text style={styles.addPaymentButtonText}>
-                      Thêm phương thức thanh toán
-                    </Text>
-                  </TouchableOpacity>
+              {paymentStatusText && (
+                <>
+                  <View style={[styles.infoCard, styles.paymentStatusCard]}>
+                    <View style={styles.paymentStatusRow}>
+                      <Icon
+                        name={
+                          paymentStatusText === "Đã thanh toán"
+                            ? "check-circle"
+                            : "payment"
+                        }
+                        size={18}
+                        color={
+                          paymentStatusText === "Đã thanh toán"
+                            ? theme.colors.success
+                            : theme.colors.warning
+                        }
+                      />
+                      <Text
+                        style={[
+                          styles.paymentStatusText,
+                          paymentStatusText === "Đã thanh toán"
+                            ? { color: theme.colors.success }
+                            : { color: theme.colors.warning },
+                        ]}
+                      >
+                        Trạng thái thanh toán: {paymentStatusText}
+                      </Text>
+                    </View>
+                  </View>
+                  {order.status === 4 &&
+                    paymentStatusText === "Chưa thanh toán" && (
+                      <TouchableOpacity
+                        style={styles.addPaymentButton}
+                        onPress={() => setAddPaymentModalVisible(true)}
+                      >
+                        <Icon
+                          name="add-circle"
+                          size={18}
+                          color={theme.colors.primary}
+                        />
+                        <Text style={styles.addPaymentButtonText}>
+                          Thêm phương thức thanh toán
+                        </Text>
+                      </TouchableOpacity>
+                    )}
+                </>
+              )}
+
+              <View style={styles.transferSection}>
+                <Text style={styles.sectionSubtitle}>
+                  Thông tin thanh toán (theo phương thức {activePaymentMethod})
+                </Text>
+                {loadingTransferInfos ? (
+                  <ActivityIndicator color={theme.colors.primary} />
+                ) : transferInfosFiltered.length === 0 ? (
+                  <Text style={styles.infoValue}>
+                    Chưa có thông tin thanh toán cho phương thức này.
+                  </Text>
+                ) : (
+                  transferInfosFiltered.map(renderTransferCard)
                 )}
+              </View>
             </>
           )}
-
-          <View style={styles.transferSection}>
-            <Text style={styles.sectionSubtitle}>
-              Thông tin thanh toán (theo phương thức {activePaymentMethod})
-            </Text>
-            {loadingTransferInfos ? (
-              <ActivityIndicator color={theme.colors.primary} />
-            ) : transferInfosFiltered.length === 0 ? (
-              <Text style={styles.infoValue}>
-                Chưa có thông tin thanh toán cho phương thức này.
-              </Text>
-            ) : (
-              transferInfosFiltered.map(renderTransferCard)
-            )}
-          </View>
         </View>
 
         {/* Summary */}
@@ -1188,6 +1218,9 @@ const styles = StyleSheet.create({
   transferSection: {
     marginTop: theme.spacing.md,
     gap: theme.spacing.sm,
+  },
+  toggleButton: {
+    padding: theme.spacing.xs,
   },
   sectionSubtitle: {
     fontSize: 14,
