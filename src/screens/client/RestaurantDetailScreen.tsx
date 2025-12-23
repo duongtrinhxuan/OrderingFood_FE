@@ -226,10 +226,9 @@ const RestaurantDetailScreen = () => {
   );
 
   const renderFeedback = (feedback: any) => {
-    const existingResponse =
-      feedback.responses &&
-      Array.isArray(feedback.responses) &&
-      feedback.responses.find((res: any) => res && res.isActive !== false);
+    const activeResponses =
+      feedback.responses?.filter((res: any) => res && res.isActive !== false) ||
+      [];
 
     return (
       <View key={feedback.id} style={styles.feedbackCard}>
@@ -265,8 +264,11 @@ const RestaurantDetailScreen = () => {
           />
         ) : null}
 
-        {existingResponse ? (
-          <View style={styles.feedbackResponseWrapper}>
+        {activeResponses.map((resp: any, idx: number) => (
+          <View
+            style={styles.feedbackResponseWrapper}
+            key={`resp-${feedback.id}-${resp.id || idx}`}
+          >
             <View style={styles.feedbackResponseConnector}>
               <View style={styles.feedbackResponseDot} />
               <View style={styles.feedbackResponseLine} />
@@ -282,17 +284,18 @@ const RestaurantDetailScreen = () => {
                   Phản hồi từ nhà hàng
                 </Text>
                 <Text style={styles.feedbackResponseDate}>
-                  {existingResponse.createdAt
-                    ? formatDateTime(existingResponse.createdAt)
-                    : ""}
+                  {resp.createdAt ? formatDateTime(resp.createdAt) : ""}
                 </Text>
               </View>
+              {resp.content ? (
+                <Text style={styles.feedbackResponseTitle}>{resp.content}</Text>
+              ) : null}
               <Text style={styles.feedbackResponseText}>
-                {existingResponse.response || "Nhà hàng đã gửi phản hồi."}
+                {resp.response || "Nhà hàng đã gửi phản hồi."}
               </Text>
             </View>
           </View>
-        ) : null}
+        ))}
       </View>
     );
   };
@@ -750,6 +753,13 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: theme.colors.text,
     lineHeight: 16,
+  },
+  feedbackResponseTitle: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: theme.colors.text,
+    marginTop: theme.spacing.xs,
+    marginBottom: theme.spacing.xs,
   },
   ratingBadge: {
     flexDirection: "row",
