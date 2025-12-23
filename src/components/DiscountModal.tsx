@@ -12,6 +12,7 @@ import Icon from "react-native-vector-icons/MaterialIcons";
 import { theme } from "../theme/theme";
 import { api } from "../services/api";
 import { formatDate } from "../utils/helpers";
+import { formatPrice } from "../utils/helpers";
 
 interface Discount {
   id: number;
@@ -30,6 +31,7 @@ interface DiscountModalProps {
   onClose: () => void;
   onSelect: (discount: Discount | null) => void;
   selectedDiscount: Discount | null;
+  subtotal: number;
 }
 
 const DiscountModal: React.FC<DiscountModalProps> = ({
@@ -37,6 +39,7 @@ const DiscountModal: React.FC<DiscountModalProps> = ({
   onClose,
   onSelect,
   selectedDiscount,
+  subtotal,
 }) => {
   const [discounts, setDiscounts] = useState<Discount[]>([]);
   const [loading, setLoading] = useState(true);
@@ -84,6 +87,15 @@ const DiscountModal: React.FC<DiscountModalProps> = ({
           return false;
         }
 
+        // Kiểm tra minOrderValue theo subtotal hiện tại
+        const minOrder = discount.minOrderValue || 0;
+        if (subtotal < minOrder) {
+          console.log(
+            `DiscountModal: Discount ${discount.id} requires minOrder ${minOrder}, subtotal=${subtotal}`
+          );
+          return false;
+        }
+
         // Nếu không có startTime hoặc endTime, vẫn cho phép (nếu status là ACTIVE)
         console.log(`DiscountModal: Discount ${discount.id} is valid`);
         return true;
@@ -117,7 +129,7 @@ const DiscountModal: React.FC<DiscountModalProps> = ({
       discountType === 1
         ? `${item.percent || 0}%`
         : discountType === 2
-        ? `${item.discountmoney?.toLocaleString("vi-VN") || 0} VND`
+        ? `${formatPrice(item.discountmoney || 0)}`
         : "Miễn phí vận chuyển";
 
     return (

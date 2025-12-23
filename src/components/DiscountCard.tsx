@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity } from "react-native";
 import Icon from "react-native-vector-icons/MaterialIcons";
 import { theme } from "../theme/theme";
 import { LinearGradient } from "expo-linear-gradient";
+import { formatPrice } from "../utils/helpers";
 
 interface DiscountCardProps {
   discount: {
@@ -33,7 +34,7 @@ const DiscountCard: React.FC<DiscountCardProps> = ({ discount, onPress }) => {
   const discountDisplay =
     discountType === 1
       ? `${discount.percent || 0}%`
-      : `${discount.discountmoney?.toLocaleString("vi-VN") || 0} VND`;
+      : `${formatPrice(discount.discountmoney || 0)}`;
 
   return (
     <TouchableOpacity style={styles.container} onPress={onPress}>
@@ -54,9 +55,9 @@ const DiscountCard: React.FC<DiscountCardProps> = ({ discount, onPress }) => {
             {discount.description ||
               (discountType === 1
                 ? `Giảm ${discount.percent}% cho đơn hàng`
-                : `Giảm ${discount.discountmoney?.toLocaleString(
-                    "vi-VN"
-                  )} VND cho đơn hàng`)}
+                : `Giảm ${formatPrice(
+                    discount.discountmoney || 0
+                  )} cho đơn hàng`)}
           </Text>
 
           <View style={styles.timeContainer}>
