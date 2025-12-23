@@ -18,6 +18,7 @@ import FoodCard from "../../components/FoodCard";
 import FilterModal from "../../components/FilterModal";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import { api } from "../../services/api";
+import MaterialIcons from "react-native-vector-icons/MaterialIcons";
 import {
   calculateDistance,
   formatDistance,
@@ -59,6 +60,7 @@ const SearchScreen = () => {
   const [restaurantsPage, setRestaurantsPage] = useState(1);
   const [restaurantsLoading, setRestaurantsLoading] = useState(false);
   const [restaurantsHasMore, setRestaurantsHasMore] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
   const [userDefaultAddress, setUserDefaultAddress] = useState<{
     latitude: number;
@@ -517,8 +519,71 @@ const SearchScreen = () => {
   ]);
 
   const handleSearch = () => {
-    setSearchQuery((prev) => prev.trim());
+    const trimmed = searchQuery.trim();
+    // Cập nhật filters để trigger load dữ liệu từ backend theo query
+    setFilters((prev) => ({
+      ...prev,
+      query: trimmed,
+      // Giữ nguyên categoryIds hiện tại
+    }));
+
+    // Reset trang và limit
+    setProductsPage(1);
+    setRestaurantsPage(1);
+    setProductsDisplayLimit(5);
+
+    // Gọi load ngay để phản hồi nhanh
+    if (selectedFilter === "all" || selectedFilter === "product") {
+      loadProducts(1, true, trimmed, filters.categoryIds);
+    }
+    if (selectedFilter === "all" || selectedFilter === "restaurant") {
+      loadRestaurants(1, true, trimmed, filters.categoryIds);
+    }
   };
+
+  // Khi xóa nội dung tìm kiếm, tự động reload kết quả mặc định
+  useEffect(() => {
+    const trimmed = searchQuery.trim();
+    if (trimmed === "" && filters.query !== "") {
+      setFilters((prev) => ({ ...prev, query: "" }));
+      setProductsPage(1);
+      setRestaurantsPage(1);
+      setProductsDisplayLimit(5);
+      if (selectedFilter === "all" || selectedFilter === "product") {
+        loadProducts(1, true, "", filters.categoryIds);
+      }
+      if (selectedFilter === "all" || selectedFilter === "restaurant") {
+        loadRestaurants(1, true, "", filters.categoryIds);
+      }
+    }
+  }, [
+    searchQuery,
+    filters.query,
+    filters.categoryIds,
+    selectedFilter,
+    loadProducts,
+    loadRestaurants,
+  ]);
+
+  // Pull-to-refresh: tải lại dữ liệu hiện tại
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    const q = searchQuery.trim() || filters.query || "";
+    if (selectedFilter === "all" || selectedFilter === "product") {
+      await loadProducts(1, true, q, filters.categoryIds);
+    }
+    if (selectedFilter === "all" || selectedFilter === "restaurant") {
+      await loadRestaurants(1, true, q, filters.categoryIds);
+    }
+    setRefreshing(false);
+  }, [
+    filters.categoryIds,
+    filters.query,
+    loadProducts,
+    loadRestaurants,
+    searchQuery,
+    selectedFilter,
+  ]);
 
   const handleFilterConfirm = (newFilters: SearchFilters) => {
     console.log("[handleFilterConfirm] newFilters:", newFilters);
@@ -817,6 +882,13 @@ const SearchScreen = () => {
             onPress={() => setShowFilterModal(true)}
           >
             <Icon name="tune" size={24} color={theme.colors.primary} />
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.filterIconButton} onPress={onRefresh}>
+            <MaterialIcons
+              name="refresh"
+              size={24}
+              color={theme.colors.primary}
+            />
           </TouchableOpacity>
         </ScrollView>
       </View>
