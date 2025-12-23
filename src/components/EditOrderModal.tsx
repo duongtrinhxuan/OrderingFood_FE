@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import {
   View,
   Text,
@@ -43,6 +43,8 @@ interface Discount {
   percent?: number;
   discountmoney?: number;
   status: string;
+  isActive?: boolean;
+  minOrderValue?: number;
 }
 
 interface Order {
@@ -113,7 +115,7 @@ const EditOrderModal: React.FC<EditOrderModalProps> = ({
     try {
       const data = await api.getDiscounts();
       const discountList = (data as any[]) || [];
-      setDiscounts(discountList.filter((d: Discount) => d.status === "ACTIVE"));
+      setDiscounts(discountList);
     } catch (error) {
       console.error("Error loading discounts:", error);
     }
@@ -228,8 +230,39 @@ const EditOrderModal: React.FC<EditOrderModalProps> = ({
     }
   };
 
+  // Tính totalPrice từ orderDetails
+  const totalPrice = useMemo(() => {
+    return orderDetails.reduce((sum, detail) => {
+      const price = detail.product?.price || 0;
+      const quantity = detail.quantity || 0;
+      return sum + price * quantity;
+    }, 0);
+  }, [orderDetails]);
+
+  // Filter discounts theo yêu cầu: status ACTIVE, isActive true, minOrderValue <= totalPrice
+  const validDiscounts = useMemo(() => {
+    return discounts.filter((discount) => {
+      // Kiểm tra status phải là "ACTIVE"
+      if (discount.status !== "ACTIVE") {
+        return false;
+      }
+      // Kiểm tra isActive phải là true
+      if (discount.isActive !== true) {
+        return false;
+      }
+      // Kiểm tra minOrderValue <= totalPrice
+      const minOrder = discount.minOrderValue || 0;
+      if (totalPrice < minOrder) {
+        return false;
+      }
+      return true;
+    });
+  }, [discounts, totalPrice]);
+
   const selectedAddress = addresses.find((a) => a.id === selectedAddressId);
-  const selectedDiscount = discounts.find((d) => d.id === selectedDiscountId);
+  const selectedDiscount = validDiscounts.find(
+    (d) => d.id === selectedDiscountId
+  );
 
   return (
     <Modal
@@ -328,13 +361,16 @@ const EditOrderModal: React.FC<EditOrderModalProps> = ({
                     Không áp dụng
                   </Text>
                 </TouchableOpacity>
-                {discounts.map((discount) => {
+                {validDiscounts.map((discount) => {
                   const discountType = discount.type || 1;
                   const discountDisplay =
                     discountType === 1
                       ? `${discount.percent || 0}%`
                       : `${
-                          discount.discountmoney?.toLocaleString("vi-VN") || 0
+                          discount.discountmoney?.toLocaleString("vi-VN", {
+                            minimumFractionDigits: 0,
+                            maximumFractionDigits: 0,
+                          }) || 0
                         } VND`;
                   return (
                     <TouchableOpacity
