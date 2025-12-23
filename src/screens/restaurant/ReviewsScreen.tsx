@@ -152,21 +152,18 @@ const ReviewsScreen = () => {
     setEditingResponseId(null);
   };
 
-  const handleToggleResponseForm = (feedback: Feedback) => {
-    if (responseFormVisibleId === feedback.id) {
+  const handleToggleResponseForm = (feedback: Feedback, response?: any) => {
+    if (responseFormVisibleId === feedback.id && !response) {
       setResponseFormVisibleId(null);
       resetResponseForm();
       return;
     }
 
-    const existingResponse = feedback.responses?.find(
-      (res) => res && res.isActive !== false
-    );
-    setEditingResponseId(existingResponse?.id ?? null);
+    setEditingResponseId(response?.id ?? null);
     setResponseForm({
-      content: existingResponse?.content || "",
-      response: existingResponse?.response || "",
-      imageUrl: existingResponse?.imageUrl || "",
+      content: response?.content || "",
+      response: response?.response || "",
+      imageUrl: response?.imageUrl || "",
     });
     setResponseFormVisibleId(feedback.id);
   };
@@ -247,12 +244,8 @@ const ReviewsScreen = () => {
     }
   };
 
-  const handleDeleteResponse = async (feedback: Feedback) => {
-    const existingResponse = feedback.responses?.[0];
-    if (!existingResponse) {
-      return;
-    }
-
+  const handleDeleteResponse = async (feedback: Feedback, response: any) => {
+    if (!response) return;
     Alert.alert("Xác nhận", "Bạn có chắc muốn ẩn phản hồi này?", [
       { text: "Hủy", style: "cancel" },
       {
@@ -260,7 +253,7 @@ const ReviewsScreen = () => {
         style: "destructive",
         onPress: async () => {
           try {
-            await api.updateResponse(existingResponse.id, {
+            await api.updateResponse(response.id, {
               isActive: false,
             });
             if (responseFormVisibleId === feedback.id) {
@@ -368,9 +361,8 @@ const ReviewsScreen = () => {
   };
 
   const renderReview = ({ item }: { item: Feedback }) => {
-    const existingResponse = item.responses?.find(
-      (res) => res && res.isActive !== false
-    );
+    const activeResponses =
+      item.responses?.filter((res) => res && res.isActive !== false) || [];
     const formExpanded = responseFormVisibleId === item.id;
     return (
       <View style={styles.reviewCard}>
@@ -402,8 +394,11 @@ const ReviewsScreen = () => {
           />
         ) : null}
 
-        {existingResponse ? (
-          <View style={styles.responseWrapper}>
+        {activeResponses.map((resp, idx) => (
+          <View
+            style={styles.responseWrapper}
+            key={`resp-${item.id}-${resp.id}-${idx}`}
+          >
             <View style={styles.responseConnector}>
               <View style={styles.responseConnectorDot} />
               <View style={styles.responseConnectorLine} />
@@ -423,58 +418,51 @@ const ReviewsScreen = () => {
                 />
                 <Text style={styles.responseLabel}>Phản hồi từ nhà hàng</Text>
                 <Text style={styles.responseDate}>
-                  {existingResponse.createdAt
-                    ? formatDateTime(existingResponse.createdAt)
-                    : ""}
+                  {resp.createdAt ? formatDateTime(resp.createdAt) : ""}
                 </Text>
               </View>
-              {existingResponse.imageUrl ? (
+              {resp.imageUrl ? (
                 <Image
                   source={{
-                    uri: buildImageUrl(existingResponse.imageUrl) || undefined,
+                    uri: buildImageUrl(resp.imageUrl) || undefined,
                   }}
                   style={styles.responseImage}
                 />
               ) : null}
-              {existingResponse.content ? (
-                <Text style={styles.responseTitle}>
-                  {existingResponse.content}
-                </Text>
+              {resp.content ? (
+                <Text style={styles.responseTitle}>{resp.content}</Text>
               ) : null}
               <Text style={styles.responseText}>
-                {existingResponse.response || "Nhà hàng đã phản hồi."}
+                {resp.response || "Nhà hàng đã phản hồi."}
               </Text>
               <View style={styles.responseActions}>
                 <TouchableOpacity
                   style={styles.iconButton}
-                  onPress={() => handleToggleResponseForm(item)}
+                  onPress={() => handleToggleResponseForm(item, resp)}
                 >
                   <Icon name="edit" size={18} color={theme.colors.primary} />
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={styles.iconButton}
-                  onPress={() => handleDeleteResponse(item)}
+                  onPress={() => handleDeleteResponse(item, resp)}
                 >
                   <Icon name="delete" size={18} color={theme.colors.error} />
                 </TouchableOpacity>
               </View>
             </View>
           </View>
-        ) : null}
+        ))}
 
         <View style={styles.reviewActions}>
           <TouchableOpacity
             style={styles.replyButton}
-            onPress={() => handleToggleResponseForm(item)}
+            onPress={() => {
+              resetResponseForm();
+              handleToggleResponseForm(item);
+            }}
           >
-            <Icon
-              name={existingResponse ? "edit" : "reply"}
-              size={16}
-              color={theme.colors.primary}
-            />
-            <Text style={styles.replyText}>
-              {existingResponse ? "Chỉnh sửa phản hồi" : "Phản hồi"}
-            </Text>
+            <Icon name="reply" size={16} color={theme.colors.primary} />
+            <Text style={styles.replyText}>Thêm phản hồi</Text>
             <Icon
               name={formExpanded ? "keyboard-arrow-up" : "keyboard-arrow-down"}
               size={18}
