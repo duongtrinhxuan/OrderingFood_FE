@@ -549,6 +549,13 @@ export const api = {
   deleteResponse(responseId: number) {
     return request(`/responses/${responseId}`, "DELETE");
   },
+  // Category APIs
+  getProductCategories() {
+    return request("/product-categories", "GET");
+  },
+  getRestaurantCategories() {
+    return request("/restaurant-categories", "GET");
+  },
   // Search APIs
   searchProducts(query?: string, categoryIds?: number[]) {
     const params = new URLSearchParams();

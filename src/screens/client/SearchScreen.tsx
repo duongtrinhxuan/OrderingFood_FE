@@ -10,12 +10,12 @@ import {
   ActivityIndicator,
   Alert,
   Dimensions,
+  Modal,
 } from "react-native";
 import Icon from "react-native-vector-icons/MaterialIcons";
 import { theme } from "../../theme/theme";
 import RestaurantCard from "../../components/RestaurantCard";
 import FoodCard from "../../components/FoodCard";
-import FilterModal from "../../components/FilterModal";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import { api } from "../../services/api";
 import MaterialIcons from "react-native-vector-icons/MaterialIcons";
@@ -35,6 +35,127 @@ interface SearchFilters {
   categoryIds: number[];
 }
 
+const extractIds = (list: any[], keys: string[]) =>
+  Array.from(
+    new Set(
+      (list || [])
+        .map((item) => {
+          for (const key of keys) {
+            if (item?.[key] !== undefined && item?.[key] !== null) {
+              return Number(item[key]);
+            }
+          }
+          if (item?.category?.id !== undefined) return Number(item.category.id);
+          if (item?.categoryId !== undefined) return Number(item.categoryId);
+          return null;
+        })
+        .filter((v) => v !== null && !Number.isNaN(Number(v)))
+    )
+  ) as number[];
+
+const getProductCategoryIds = (item: any) => {
+  const fromCategories = extractIds(item?.categories || [], [
+    "id",
+    "categoryId",
+  ]);
+  const fromMaps = extractIds(item?.category_product_maps || [], [
+    "categoryId",
+    "category_id",
+    "categoryID",
+  ]);
+  return Array.from(new Set([...fromCategories, ...fromMaps]));
+};
+
+const getRestaurantCategoryIds = (item: any) => {
+  const fromCategories = extractIds(item?.categories || [], [
+    "id",
+    "categoryId",
+  ]);
+  const fromMaps = extractIds(item?.category_restaurant_maps || [], [
+    "categoryId",
+    "category_id",
+    "categoryID",
+  ]);
+  return Array.from(new Set([...fromCategories, ...fromMaps]));
+};
+
+const sortByCategoryMatch = (
+  items: any[],
+  selectedIds: number[],
+  type: "product" | "restaurant"
+) => {
+  if (!selectedIds || selectedIds.length === 0) {
+    return [...items].sort((a, b) =>
+      (a?.name || "").localeCompare(b?.name || "")
+    );
+  }
+  return [...items]
+    .map((item) => {
+      const ids =
+        type === "product"
+          ? getProductCategoryIds(item)
+          : getRestaurantCategoryIds(item);
+      const matchCount = ids.filter((id) => selectedIds.includes(id)).length;
+      return { item, matchCount };
+    })
+    .sort((a, b) => {
+      if (b.matchCount !== a.matchCount) return b.matchCount - a.matchCount;
+      return (a.item?.name || "").localeCompare(b.item?.name || "");
+    })
+    .map(({ item }) => item);
+};
+
+const normalizeText = (val?: string) =>
+  (val || "").toString().toLowerCase().trim();
+
+const sortWithPriority = (
+  items: any[],
+  query: string,
+  selectedIds: number[],
+  type: "product" | "restaurant",
+  userDefaultAddress?: { latitude: number; longitude: number }
+) => {
+  const q = normalizeText(query);
+  return [...items]
+    .map((item) => {
+      const name = normalizeText(item?.name);
+      const nameScore = q ? (name.includes(q) ? 1 : 0) : 0;
+      const ids =
+        type === "product"
+          ? getProductCategoryIds(item)
+          : getRestaurantCategoryIds(item);
+      const matchCount = selectedIds.length
+        ? ids.filter((id) => selectedIds.includes(id)).length
+        : 0;
+      let distance = item.distance;
+      if (
+        type === "restaurant" &&
+        !distance &&
+        userDefaultAddress &&
+        item.address
+      ) {
+        distance = calculateDistance(
+          userDefaultAddress.latitude,
+          userDefaultAddress.longitude,
+          item.address.latitude,
+          item.address.longitude
+        );
+      }
+      return { item, nameScore, matchCount, distance: distance ?? null };
+    })
+    .sort((a, b) => {
+      if (b.nameScore !== a.nameScore) return b.nameScore - a.nameScore; // ưu tiên tên khớp
+      if (b.matchCount !== a.matchCount) return b.matchCount - a.matchCount; // ưu tiên nhiều category trùng
+      if (a.distance !== null && b.distance !== null) {
+        return a.distance - b.distance; // khoảng cách gần hơn
+      }
+      if (a.distance === null && b.distance !== null) return 1;
+      if (a.distance !== null && b.distance === null) return -1;
+      return (a.item?.name || "").localeCompare(b.item?.name || "");
+    })
+    .map(({ item }) => item);
+};
+
 const SearchScreen = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedFilter, setSelectedFilter] = useState<SearchType>("all");
@@ -44,6 +165,14 @@ const SearchScreen = () => {
     type: null,
     categoryIds: [],
   });
+  const [advancedType, setAdvancedType] = useState<"product" | "restaurant">(
+    "product"
+  );
+  const [advancedQuery, setAdvancedQuery] = useState("");
+  const [advancedCategories, setAdvancedCategories] = useState<number[]>([]);
+  const [advancedApplied, setAdvancedApplied] = useState(false);
+  const [productCategories, setProductCategories] = useState<any[]>([]);
+  const [restaurantCategories, setRestaurantCategories] = useState<any[]>([]);
 
   // Products state
   const [products, setProducts] = useState<any[]>([]);
@@ -71,6 +200,21 @@ const SearchScreen = () => {
   const { cartId, refreshCartCount } = useCart();
   const navigation = useNavigation();
   const route = useRoute();
+
+  const loadCategories = useCallback(async () => {
+    try {
+      const [productCats, restaurantCats] = await Promise.all([
+        api.getProductCategories(),
+        api.getRestaurantCategories(),
+      ]);
+      setProductCategories(Array.isArray(productCats) ? productCats : []);
+      setRestaurantCategories(
+        Array.isArray(restaurantCats) ? restaurantCats : []
+      );
+    } catch (error) {
+      console.error("Error loading categories:", error);
+    }
+  }, []);
 
   // Load user default address
   useEffect(() => {
@@ -137,13 +281,21 @@ const SearchScreen = () => {
     }
   }, [route.params]);
 
+  // Load categories when mở advanced filter
+  useEffect(() => {
+    if (showFilterModal) {
+      loadCategories();
+    }
+  }, [showFilterModal, loadCategories]);
+
   // Load products
   const loadProducts = useCallback(
     async (
       page: number,
       reset: boolean = false,
       overrideQuery?: string,
-      overrideCategoryIds?: number[]
+      overrideCategoryIds?: number[],
+      useAdvancedAll?: boolean
     ) => {
       console.log("[loadProducts] Function called with:", {
         page,
@@ -172,69 +324,33 @@ const SearchScreen = () => {
           "categoryIds:",
           categoryIds
         );
-        let allProducts: any[] = [];
-
-        // Nếu không có query và không có categoryIds, load tất cả products
-        if (!query && categoryIds.length === 0) {
-          allProducts = await api.getAllProducts(page, 50);
+        let productsData: any[] = [];
+        if (useAdvancedAll) {
+          productsData = await api.getAllProducts(1, 200);
+        } else if (!query && categoryIds.length === 0) {
+          productsData = await api.getAllProducts(page, 50);
         } else {
-          // Có query hoặc categoryIds, dùng search API
-          // Nếu chỉ có categoryIds mà không có query, vẫn gọi searchProducts với query = undefined
-          console.log(
-            "[loadProducts] Calling searchProducts with query:",
-            query || undefined,
-            "categoryIds:",
-            categoryIds
-          );
-          allProducts = await api.searchProducts(
+          productsData = await api.searchProducts(
             query || undefined,
             categoryIds.length > 0 ? categoryIds : undefined
           );
-          console.log(
-            "[loadProducts] Received products:",
-            allProducts.length,
-            "products"
-          );
         }
 
-        // Khi reset, lưu tất cả products vào allProducts và filteredProducts
-        // useEffect filter sẽ tự động cập nhật products từ allProducts
-        if (reset) {
-          // Loại bỏ duplicate khi reset
-          const uniqueProducts = Array.from(
-            new Map(allProducts.map((p) => [p.id, p])).values()
-          );
-          console.log(
-            "[loadProducts] Reset - Setting allProducts:",
-            uniqueProducts.length,
-            "products"
-          );
-          console.log(
-            "[loadProducts] Sample products:",
-            uniqueProducts.slice(0, 3).map((p) => ({ id: p.id, name: p.name }))
-          );
-          setAllProducts(uniqueProducts);
-          setFilteredProducts(uniqueProducts); // Cập nhật filteredProducts khi reset
-          // Cập nhật products ngay lập tức để đảm bảo hiển thị
-          setProducts(uniqueProducts);
-        } else {
-          setAllProducts((prev) => {
-            // Loại bỏ duplicate khi thêm mới
-            const combined = [...prev, ...productsData];
-            return Array.from(new Map(combined.map((p) => [p.id, p])).values());
-          });
-          setProducts((prev) => {
-            // Loại bỏ duplicate trong products hiển thị
-            const combined = [...prev, ...productsData];
-            return Array.from(new Map(combined.map((p) => [p.id, p])).values());
-          });
-          setProductsHasMore(endIndex < allProducts.length);
-        }
+        const uniqueProducts = Array.from(
+          new Map(productsData.map((p) => [p.id, p])).values()
+        );
+        const sortedProducts = sortWithPriority(
+          uniqueProducts,
+          query || "",
+          categoryIds,
+          "product"
+        );
 
-        // Nếu reset, set hasMore dựa trên allProducts.length
-        if (reset) {
-          setProductsHasMore(false); // Khi reset với advanced filters, không có more
-        }
+        setAllProducts(sortedProducts);
+        setFilteredProducts(sortedProducts);
+        setProducts(sortedProducts);
+        setProductsHasMore(false);
+        setProductsDisplayLimit(sortedProducts.length || 0);
       } catch (error: any) {
         console.error("[loadProducts] Error loading products:", error);
         Alert.alert("Lỗi", "Không thể tải danh sách món ăn.");
@@ -254,7 +370,8 @@ const SearchScreen = () => {
       page: number,
       reset: boolean = false,
       overrideQuery?: string,
-      overrideCategoryIds?: number[]
+      overrideCategoryIds?: number[],
+      useAdvancedAll?: boolean
     ) => {
       if (restaurantsLoading) return;
 
@@ -262,23 +379,23 @@ const SearchScreen = () => {
         setRestaurantsLoading(true);
         const query = overrideQuery ?? searchQuery;
         const categoryIds = overrideCategoryIds ?? filters.categoryIds;
-        let allRestaurants: any[] = [];
+        let restaurantsData: any[] = [];
 
         // Nếu không có query và không có categoryIds, load tất cả restaurants
-        if (!query && categoryIds.length === 0) {
-          allRestaurants = await api.getAllRestaurants(page, 50);
+        if (useAdvancedAll) {
+          restaurantsData = await api.getAllRestaurants(1, 200);
+        } else if (!query && categoryIds.length === 0) {
+          restaurantsData = await api.getAllRestaurants(page, 50);
         } else {
           // Có query hoặc categoryIds, dùng search API
-          // Nếu filters.type === "restaurant", truyền restaurantCategoryIds
-          // Nếu filters.type === "product" hoặc null, truyền productCategoryIds
-          if (filters.type === "restaurant") {
-            allRestaurants = await api.searchRestaurants(
+          if (filters.type === "restaurant" || advancedType === "restaurant") {
+            restaurantsData = await api.searchRestaurants(
               query || undefined,
               undefined, // productCategoryIds
               categoryIds.length > 0 ? categoryIds : undefined // restaurantCategoryIds
             );
           } else {
-            allRestaurants = await api.searchRestaurants(
+            restaurantsData = await api.searchRestaurants(
               query || undefined,
               categoryIds.length > 0 ? categoryIds : undefined, // productCategoryIds
               undefined // restaurantCategoryIds
@@ -287,7 +404,7 @@ const SearchScreen = () => {
         }
 
         if (userDefaultAddress) {
-          allRestaurants = allRestaurants.map((restaurant) => {
+          restaurantsData = restaurantsData.map((restaurant) => {
             if (restaurant.address) {
               const distance = calculateDistance(
                 userDefaultAddress.latitude,
@@ -301,32 +418,19 @@ const SearchScreen = () => {
           });
         }
 
-        const limit = 5;
-        const startIndex = (page - 1) * limit;
-        const endIndex = startIndex + limit;
-        const restaurantsData = allRestaurants.slice(startIndex, endIndex);
-
-        if (reset) {
-          // Loại bỏ duplicate khi reset
-          const uniqueRestaurants = Array.from(
-            new Map(allRestaurants.map((r) => [r.id, r])).values()
-          );
-          setAllRestaurants(uniqueRestaurants);
-          setRestaurants(restaurantsData);
-        } else {
-          setAllRestaurants((prev) => {
-            // Loại bỏ duplicate khi thêm mới
-            const combined = [...prev, ...restaurantsData];
-            return Array.from(new Map(combined.map((r) => [r.id, r])).values());
-          });
-          setRestaurants((prev) => {
-            // Loại bỏ duplicate trong restaurants hiển thị
-            const combined = [...prev, ...restaurantsData];
-            return Array.from(new Map(combined.map((r) => [r.id, r])).values());
-          });
-        }
-
-        setRestaurantsHasMore(endIndex < allRestaurants.length);
+        const uniqueRestaurants = Array.from(
+          new Map(restaurantsData.map((r) => [r.id, r])).values()
+        );
+        const sortedRestaurants = sortWithPriority(
+          uniqueRestaurants,
+          query || "",
+          categoryIds,
+          "restaurant",
+          userDefaultAddress || undefined
+        );
+        setAllRestaurants(sortedRestaurants);
+        setRestaurants(sortedRestaurants);
+        setRestaurantsHasMore(false);
       } catch (error: any) {
         console.error("Error loading restaurants:", error);
         Alert.alert("Lỗi", "Không thể tải danh sách nhà hàng.");
@@ -541,6 +645,19 @@ const SearchScreen = () => {
     }
   };
 
+  const resetAdvancedState = useCallback(() => {
+    setAdvancedApplied(false);
+    setAdvancedCategories([]);
+    setAdvancedQuery("");
+    setAdvancedType("product");
+    setFilters({ query: "", type: null, categoryIds: [] });
+    setSearchQuery("");
+    setSelectedFilter("all");
+    setProductsPage(1);
+    setRestaurantsPage(1);
+    setProductsDisplayLimit(5);
+  }, []);
+
   // Khi xóa nội dung tìm kiếm, tự động reload kết quả mặc định
   useEffect(() => {
     const trimmed = searchQuery.trim();
@@ -568,47 +685,35 @@ const SearchScreen = () => {
   // Pull-to-refresh: tải lại dữ liệu hiện tại
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    const q = searchQuery.trim() || filters.query || "";
-    if (selectedFilter === "all" || selectedFilter === "product") {
-      await loadProducts(1, true, q, filters.categoryIds);
-    }
-    if (selectedFilter === "all" || selectedFilter === "restaurant") {
-      await loadRestaurants(1, true, q, filters.categoryIds);
-    }
+    resetAdvancedState();
+    await loadProducts(1, true, "", []);
+    await loadRestaurants(1, true, "", []);
     setRefreshing(false);
-  }, [
-    filters.categoryIds,
-    filters.query,
-    loadProducts,
-    loadRestaurants,
-    searchQuery,
-    selectedFilter,
-  ]);
+  }, [loadProducts, loadRestaurants, resetAdvancedState]);
 
-  const handleFilterConfirm = (newFilters: SearchFilters) => {
-    console.log("[handleFilterConfirm] newFilters:", newFilters);
-    // Reset searchQuery về rỗng khi dùng advanced filter
+  const handleFilterConfirm = () => {
+    const trimmed = advancedQuery.trim();
+    setShowFilterModal(false);
     setSearchQuery("");
+    setAdvancedApplied(true);
 
-    // Điều hướng đến filter đúng dựa trên type
-    if (newFilters.type === "product") {
-      setSelectedFilter("product");
-    } else if (newFilters.type === "restaurant") {
-      setSelectedFilter("restaurant");
-    } else {
-      // Nếu không có type, về "all"
-      setSelectedFilter("all");
-    }
-
-    // Cập nhật filters để trigger useEffect load data
-    // Không gọi loadProducts trực tiếp ở đây, để useEffect filters xử lý
-    const updatedFilters = {
-      query: newFilters.query ?? "",
-      type: newFilters.type,
-      categoryIds: newFilters.categoryIds || [],
+    const updatedFilters: SearchFilters = {
+      query: trimmed,
+      type: advancedType,
+      categoryIds: advancedCategories,
     };
-    console.log("[handleFilterConfirm] Setting filters:", updatedFilters);
+
+    setSelectedFilter(advancedType === "product" ? "product" : "restaurant");
     setFilters(updatedFilters);
+
+    // Tải dữ liệu ngay
+    if (advancedType === "product") {
+      loadProducts(1, true, trimmed, advancedCategories, true);
+      setRestaurants([]);
+    } else {
+      loadRestaurants(1, true, trimmed, advancedCategories, true);
+      setProducts([]);
+    }
   };
 
   const handleLoadMoreProducts = () => {
@@ -874,9 +979,13 @@ const SearchScreen = () => {
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.filtersScroll}
         >
-          {renderFilterChip("all", "Tất cả")}
-          {renderFilterChip("product", "Món ăn")}
-          {renderFilterChip("restaurant", "Nhà hàng")}
+          {!advancedApplied && (
+            <>
+              {renderFilterChip("all", "Tất cả")}
+              {renderFilterChip("product", "Món ăn")}
+              {renderFilterChip("restaurant", "Nhà hàng")}
+            </>
+          )}
           <TouchableOpacity
             style={styles.filterIconButton}
             onPress={() => setShowFilterModal(true)}
@@ -1013,12 +1122,132 @@ const SearchScreen = () => {
         )}
       </ScrollView>
 
-      {/* Filter Modal */}
-      <FilterModal
+      {/* Advanced Filter Modal */}
+      <Modal
         visible={showFilterModal}
-        onClose={() => setShowFilterModal(false)}
-        onConfirm={handleFilterConfirm}
-      />
+        animationType="slide"
+        transparent
+        onRequestClose={() => setShowFilterModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContainer}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Tìm kiếm nâng cao</Text>
+              <TouchableOpacity onPress={() => setShowFilterModal(false)}>
+                <Icon name="close" size={22} color={theme.colors.text} />
+              </TouchableOpacity>
+            </View>
+
+            {/* Tabs */}
+            <View style={styles.tabRow}>
+              {["product", "restaurant"].map((type) => (
+                <TouchableOpacity
+                  key={type}
+                  style={[
+                    styles.tabButton,
+                    advancedType === type && styles.tabButtonActive,
+                  ]}
+                  onPress={() => {
+                    setAdvancedType(type as "product" | "restaurant");
+                    setAdvancedCategories([]);
+                  }}
+                >
+                  <Text
+                    style={[
+                      styles.tabText,
+                      advancedType === type && styles.tabTextActive,
+                    ]}
+                  >
+                    {type === "product" ? "Món ăn" : "Nhà hàng"}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            {/* Query input */}
+            <View style={styles.modalField}>
+              <Text style={styles.modalLabel}>Tìm theo tên</Text>
+              <View style={styles.modalInputWrapper}>
+                <Icon name="search" size={20} color={theme.colors.mediumGray} />
+                <TextInput
+                  style={styles.modalInput}
+                  placeholder="Nhập tên món ăn hoặc nhà hàng"
+                  value={advancedQuery}
+                  onChangeText={setAdvancedQuery}
+                />
+              </View>
+            </View>
+
+            {/* Categories */}
+            <View style={styles.modalField}>
+              <Text style={styles.modalLabel}>Chọn danh mục</Text>
+              <ScrollView
+                style={styles.categoryScroll}
+                contentContainerStyle={styles.categoryContainer}
+              >
+                {(advancedType === "product"
+                  ? productCategories
+                  : restaurantCategories
+                ).map((cat: any) => {
+                  const catId =
+                    cat.id ??
+                    cat.categoryId ??
+                    cat.category_id ??
+                    cat.categoryID ??
+                    cat.category?.id;
+                  if (catId === undefined || catId === null) return null;
+                  const isSelected = advancedCategories.includes(Number(catId));
+                  return (
+                    <TouchableOpacity
+                      key={`cat-${catId}`}
+                      style={[
+                        styles.categoryChip,
+                        isSelected && styles.categoryChipSelected,
+                      ]}
+                      onPress={() => {
+                        setAdvancedCategories((prev) => {
+                          if (prev.includes(Number(catId))) {
+                            return prev.filter((id) => id !== Number(catId));
+                          }
+                          return [...prev, Number(catId)];
+                        });
+                      }}
+                    >
+                      <Text
+                        style={[
+                          styles.categoryText,
+                          isSelected && styles.categoryTextSelected,
+                        ]}
+                      >
+                        {cat.name || cat.title || "Danh mục"}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+            </View>
+
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.modalButtonSecondary]}
+                onPress={() => {
+                  setAdvancedCategories([]);
+                  setAdvancedQuery("");
+                  setAdvancedType("product");
+                }}
+              >
+                <Text style={styles.modalButtonSecondaryText}>Đặt lại</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.modalButtonPrimary]}
+                onPress={handleFilterConfirm}
+              >
+                <Text style={styles.modalButtonPrimaryText}>Xác nhận</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 };
@@ -1136,6 +1365,131 @@ const styles = StyleSheet.create({
   emptyText: {
     fontSize: 14,
     color: theme.colors.mediumGray,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.3)",
+    justifyContent: "center",
+    padding: theme.spacing.lg,
+  },
+  modalContainer: {
+    backgroundColor: theme.colors.surface,
+    borderRadius: theme.roundness,
+    padding: theme.spacing.lg,
+    maxHeight: Dimensions.get("window").height * 0.8,
+  },
+  modalHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: theme.spacing.md,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: "bold",
+    color: theme.colors.text,
+  },
+  tabRow: {
+    flexDirection: "row",
+    marginBottom: theme.spacing.md,
+  },
+  tabButton: {
+    flex: 1,
+    paddingVertical: theme.spacing.sm,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    borderRadius: theme.roundness,
+    marginRight: theme.spacing.sm,
+    alignItems: "center",
+  },
+  tabButtonActive: {
+    backgroundColor: theme.colors.primary,
+    borderColor: theme.colors.primary,
+  },
+  tabText: {
+    color: theme.colors.text,
+    fontWeight: "500",
+  },
+  tabTextActive: {
+    color: theme.colors.surface,
+  },
+  modalField: {
+    marginBottom: theme.spacing.md,
+  },
+  modalLabel: {
+    fontSize: 14,
+    fontWeight: "500",
+    marginBottom: theme.spacing.xs,
+    color: theme.colors.text,
+  },
+  modalInputWrapper: {
+    flexDirection: "row",
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    borderRadius: theme.roundness,
+    paddingHorizontal: theme.spacing.sm,
+    backgroundColor: theme.colors.background,
+  },
+  modalInput: {
+    flex: 1,
+    marginLeft: theme.spacing.xs,
+    color: theme.colors.text,
+  },
+  categoryScroll: {
+    maxHeight: 220,
+  },
+  categoryContainer: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: theme.spacing.xs,
+  },
+  categoryChip: {
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.sm,
+    borderRadius: theme.roundness,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    backgroundColor: theme.colors.background,
+  },
+  categoryChipSelected: {
+    backgroundColor: theme.colors.primary,
+    borderColor: theme.colors.primary,
+  },
+  categoryText: {
+    color: theme.colors.text,
+    fontSize: 13,
+  },
+  categoryTextSelected: {
+    color: theme.colors.surface,
+  },
+  modalActions: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    marginTop: theme.spacing.md,
+    gap: theme.spacing.sm,
+  },
+  modalButton: {
+    paddingVertical: theme.spacing.sm,
+    paddingHorizontal: theme.spacing.lg,
+    borderRadius: theme.roundness,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+  },
+  modalButtonSecondary: {
+    backgroundColor: theme.colors.background,
+  },
+  modalButtonPrimary: {
+    backgroundColor: theme.colors.primary,
+    borderColor: theme.colors.primary,
+  },
+  modalButtonSecondaryText: {
+    color: theme.colors.text,
+    fontWeight: "600",
+  },
+  modalButtonPrimaryText: {
+    color: theme.colors.surface,
+    fontWeight: "600",
   },
 });
 
