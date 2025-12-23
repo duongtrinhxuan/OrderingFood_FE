@@ -1,4 +1,9 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, {
+  useState,
+  useEffect,
+  useCallback,
+  useLayoutEffect,
+} from "react";
 import {
   View,
   Text,
@@ -97,6 +102,11 @@ const HomeScreen = () => {
   const { cartId, refreshCartCount } = useCart();
   const navigation = useNavigation<any>();
 
+  // Ẩn header mặc định để tránh trùng tiêu đề
+  useLayoutEffect(() => {
+    navigation.setOptions({ headerShown: false });
+  }, [navigation]);
+
   // Load user default address
   useEffect(() => {
     const loadUserAddress = async () => {
@@ -142,14 +152,19 @@ const HomeScreen = () => {
     try {
       setLoading(true);
 
-      // Load discounts (Active status, sorted by startTime)
+      // Load discounts: chỉ lấy ACTIVE + isActive=true, lấy 5 mã gần nhất theo startTime mới nhất
       const discountsData = await api.getDiscounts();
       const activeDiscounts = (discountsData as Discount[])
-        .filter((d) => d.status === "ACTIVE" || d.status === "Active")
+        .filter(
+          (d) =>
+            (d.status === "ACTIVE" || d.status === "Active") &&
+            d.isActive !== false
+        )
         .sort(
           (a, b) =>
-            new Date(a.startTime).getTime() - new Date(b.startTime).getTime()
-        );
+            new Date(b.startTime).getTime() - new Date(a.startTime).getTime()
+        )
+        .slice(0, 5);
       setDiscounts(activeDiscounts);
 
       // Load popular products (top 5 có nhiều order nhất)
@@ -212,9 +227,26 @@ const HomeScreen = () => {
         : 0;
 
     // Tính khoảng cách nếu có tọa độ customer và nhà hàng
-    let distance = item.distance;
-    if (!distance && userDefaultAddress && item.address) {
-      distance = calculateDistance(
+    // Chuẩn hóa distance về số (km) nếu có
+    let rawDistance: number | null = null;
+    if (typeof item.distance === "number" && !Number.isNaN(item.distance)) {
+      rawDistance = item.distance;
+    } else if (
+      typeof item.distance === "string" &&
+      item.distance.trim().length > 0
+    ) {
+      const parsed = parseFloat(item.distance);
+      rawDistance = Number.isFinite(parsed) ? parsed : null;
+    }
+
+    // Nếu chưa có distance và có tọa độ, tính khoảng cách
+    if (
+      rawDistance === null &&
+      userDefaultAddress &&
+      item.address?.latitude &&
+      item.address?.longitude
+    ) {
+      rawDistance = calculateDistance(
         userDefaultAddress.latitude,
         userDefaultAddress.longitude,
         item.address.latitude,
@@ -222,13 +254,18 @@ const HomeScreen = () => {
       );
     }
 
+    const displayDistance =
+      rawDistance !== null ? formatDistance(rawDistance) : "Không xác định";
+    const displayDeliveryTime =
+      rawDistance !== null
+        ? calculateDeliveryTime(rawDistance)
+        : "Không xác định";
+
     const restaurantData = {
       id: item.id.toString(),
       name: item.name,
       rating: ratingValue,
-      deliveryTime: distance
-        ? calculateDeliveryTime(distance)
-        : "Không xác định",
+      deliveryTime: displayDeliveryTime,
       deliveryFee: 20000, // Phí ship mặc định 20.000đ
       image:
         buildImageUrl(item.imageUrl) || "https://via.placeholder.com/300x200",
@@ -236,7 +273,7 @@ const HomeScreen = () => {
         item.categories?.map(
           (c: any) => c.name || c.category?.name || "Nhà hàng"
         ) || [],
-      distance: distance ? formatDistance(distance) : "Không xác định",
+      distance: displayDistance,
     };
 
     return (
