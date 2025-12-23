@@ -60,6 +60,7 @@ const OrderJourneyModal: React.FC<OrderJourneyModalProps> = ({
     latitude: number;
     longitude: number;
   } | null>(null);
+  const [isFormCollapsed, setIsFormCollapsed] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<any[]>([]);
   const [searching, setSearching] = useState(false);
