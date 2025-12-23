@@ -568,6 +568,7 @@ const CheckoutScreen = ({ navigation }: any) => {
         onClose={() => setShowDiscountModal(false)}
         onSelect={setSelectedDiscount}
         selectedDiscount={selectedDiscount}
+        subtotal={calculateSubtotal()}
       />
 
       {user && (
