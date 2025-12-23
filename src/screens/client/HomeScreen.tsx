@@ -421,7 +421,7 @@ const HomeScreen = () => {
           <Icon name="local-offer" size={18} color={theme.colors.primary} />
           <Text style={styles.discountCodeText}>{item.code}</Text>
         </View>
-        <Text style={styles.discountStatusBadge}>ACTIVE</Text>
+        <Text style={styles.discountStatusBadge}>Hợp lệ</Text>
       </View>
       <Text style={styles.discountDescription}>
         {item.description || "Không có mô tả"}
